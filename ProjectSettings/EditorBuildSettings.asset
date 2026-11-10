@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/EOSAT1_Unity/Assets/EOSAT1/Scenes/EOSAT1_Menu.unity
+    guid: fb1745e670244c788501f791617c38b8
+  - enabled: 1
     path: Assets/EOSAT1_Unity/Assets/EOSAT1/Scenes/EOSAT1_Demo.unity
     guid: 41abd56338f2782419653a62e31676eb
   - enabled: 1

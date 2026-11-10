@@ -72,6 +72,13 @@ namespace Eosat1
                 cameraTransform.rotation = rot;
             }
 
+            // back to the main menu (when the menu scene is in the build list)
+            if (InputShim.Down(KeyCode.Escape) && Application.CanStreamedLevelBeLoaded(MenuSettings.MenuSceneName))
+            {
+                UnityEngine.SceneManagement.SceneManager.LoadScene(MenuSettings.MenuSceneName);
+                return;
+            }
+
             // keyboard shortcuts work with or without a headset (instructor at the PC)
             if (app == null) return;
             bool shift = InputShim.Held(KeyCode.LeftShift) || InputShim.Held(KeyCode.RightShift);
