@@ -32,6 +32,34 @@ will reuse.
 textures settings). If an older build left a separate `Assets/EOSAT1` folder that holds
 only `Generated`, `Materials` and `Scenes`, delete it.
 
+## Main menu (mission control room)
+
+Pressing Play (or starting a build) opens `Scenes/EOSAT1_Menu.unity` first: you stand at the
+back of a mission control room, facing three wall screens.
+
+- **Centre screen** is the menu: the title, **Start Simulation**, **Settings** and **Quit**.
+- **Left screen** shows the ground track of a 500 km sun-synchronous orbit, **right screen**
+  the spacecraft status and the data source you picked.
+- **Desktop:** point with the mouse and click. `Enter` starts, `Esc` leaves Settings.
+- **Headset:** point either controller and pull its trigger (or press `A` / `X`); the left
+  stick walks you around the room. Without controllers the pointer follows your head.
+- In the simulation, `Esc` returns to the menu.
+
+**Settings** are remembered between runs and apply when you start from the menu: data source
+(Sandbox / Replay / Live link), time speed at start (1x / 10x / 60x), info panel and control
+hints shown or hidden, and the headset's snap-turn angle. `eosat1_link.json` and the
+`-eosat...` command-line options still override them.
+
+The room is built by code when the scene starts (`Scripts/Unity/Menu`), so the scene holds
+one object, **Mission Control Menu**; its Inspector has the title, subtitle and accent colour.
+In the Editor's Scene view the room only appears while playing.
+
+| EOSAT-1 menu item | Does |
+|---|---|
+| **Open Menu Scene** | opens `EOSAT1_Menu.unity` |
+| **Rebuild Menu Scene** | recreates it and puts it first in the build list |
+| **Start Play Mode at Main Menu** | ticked by default: Play always starts at the menu. Untick it to play the open scene directly while working on it |
+
 ## Controls
 
 **Mouse and keyboard** (also work while someone wears the headset)
@@ -221,11 +249,15 @@ If any of these differ, it's a one-line change; send me the ICD and I'll match i
 EOSAT1/
   Scripts/Core/     plain C#, no Unity: maths, time & ephemeris, orbit, JSON, frame parser,
                     FrameTimeline (interpolation/jumps), TcpFeedClient, JsonlReplay, SandboxSim
+  Scripts/Unity/Menu/  MissionControlMenu (the menu and its screens), MissionControlRoom (the room),
+                    MenuKit (quads, text, buttons), MenuSettings (remembered choices)
   Scripts/Unity/    EosatApp (conductor), SpaceScene (Earth/Sun/Moon/stars placement),
                     SatelliteView + DeployableJoint, InfoPanel, DesktopControls, VrRig,
                     InputShim, SimToUnity, ProceduralMeshes, FaceCamera
   Editor/           EosatSceneBuilder (the EOSAT-1 menu; builds the spacecraft from the parts list)
+                    EosatMenuTools (menu scene helpers; Play starts at the main menu)
   Shaders/          Planet, Atmosphere, SunGlow, Stars, UnlitColor, GlowAdditive, GridFloor, HudText
+                    Room, UiPanel, MapScreen, ConsoleScreen (main menu)
   Textures/         earth_day, earth_night, moon; panel_a/panel_b (+ _mask), mli_gold (+ _normal)
   Data/             eosat1_model.json (the spacecraft), eosat1_one_orbit.jsonl.txt (5,671 frames),
                     bright_stars.txt

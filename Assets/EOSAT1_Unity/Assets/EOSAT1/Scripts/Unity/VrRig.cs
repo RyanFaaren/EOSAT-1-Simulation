@@ -36,6 +36,11 @@ namespace Eosat1
         bool turnLatched;
         bool prevA, prevB, prevX, prevY, prevTrigR, prevTrigL, prevMenu, prevGripL;
 
+        void Start()
+        {
+            if (MenuSettings.LaunchedFromMenu) snapTurnDegrees = MenuSettings.SnapTurnDegrees;
+        }
+
         void OnEnable()
         {
             Application.onBeforeRender += OnBeforeRender;

@@ -93,6 +93,7 @@ namespace Eosat1
         {
             Application.runInBackground = true;
             pushToTimeline = f => timeline.Push(f);
+            MenuSettings.ApplyTo(this);   // choices from the main menu, when started from it
             ApplyLinkOverrides();
         }
 

@@ -75,6 +75,34 @@ namespace Eosat1
 #endif
         }
 
+        /// <summary>Mouse position in screen pixels (origin bottom-left).</summary>
+        public static Vector2 MousePosition()
+        {
+#if ENABLE_LEGACY_INPUT_MANAGER
+            Vector3 p = Input.mousePosition;
+            return new Vector2(p.x, p.y);
+#elif ENABLE_INPUT_SYSTEM
+            return Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
+#else
+            return Vector2.zero;
+#endif
+        }
+
+        /// <summary>True on the frame the button goes down. 0 left, 1 right, 2 middle.</summary>
+        public static bool MouseDown(int button)
+        {
+#if ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetMouseButtonDown(button);
+#elif ENABLE_INPUT_SYSTEM
+            if (Mouse.current == null) return false;
+            if (button == 0) return Mouse.current.leftButton.wasPressedThisFrame;
+            if (button == 1) return Mouse.current.rightButton.wasPressedThisFrame;
+            return Mouse.current.middleButton.wasPressedThisFrame;
+#else
+            return false;
+#endif
+        }
+
 #if !ENABLE_LEGACY_INPUT_MANAGER && ENABLE_INPUT_SYSTEM
         static KeyControl Control(KeyCode k)
         {
