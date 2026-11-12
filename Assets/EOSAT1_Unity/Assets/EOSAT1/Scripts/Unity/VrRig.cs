@@ -7,6 +7,8 @@
 // X            info panel on/off          Y            time 1x -> 10x -> 60x
 // Left grip    pause                      Menu         restart the scenario
 // Right trigger body axes                 Left trigger camera boresight
+// Right grip   whole Earth / back         Right stick click  satellite camera screen
+// Left stick click  orbit path on/off
 // Commands only act in Sandbox mode; with the simulator they come from mission control.
 using System.Collections.Generic;
 using UnityEngine;
@@ -18,6 +20,8 @@ namespace Eosat1
     {
         public EosatApp app;
         public InfoPanel infoPanel;
+        [Tooltip("Extra views (whole Earth, satellite camera, orbit path). Found at start if left empty.")]
+        public ViewDirector views;
         [Tooltip("Parent of the tracked head and hands; lifted to eye height if the runtime has no floor origin.")]
         public Transform cameraOffset;
         public Transform head;
@@ -35,6 +39,7 @@ namespace Eosat1
         bool floorConfirmed;
         bool turnLatched;
         bool prevA, prevB, prevX, prevY, prevTrigR, prevTrigL, prevMenu, prevGripL;
+        bool prevGripR, prevStickR, prevStickL;
 
         void Start()
         {
@@ -178,6 +183,9 @@ namespace Eosat1
             if (Pressed(left, CommonUsages.triggerButton, ref prevTrigL) && app != null) app.ToggleBoresight();
             if (Pressed(left, CommonUsages.menuButton, ref prevMenu) && app != null) app.Restart();
             if (Pressed(left, CommonUsages.gripButton, ref prevGripL) && app != null) app.TogglePause();
+            if (Pressed(right, CommonUsages.gripButton, ref prevGripR) && views != null) views.ToggleOverview();
+            if (Pressed(right, CommonUsages.primary2DAxisClick, ref prevStickR) && views != null) views.CycleSatCamera();
+            if (Pressed(left, CommonUsages.primary2DAxisClick, ref prevStickL) && views != null) views.TogglePath();
         }
 
         static bool Pressed(InputDevice d, InputFeatureUsage<bool> usage, ref bool previous)

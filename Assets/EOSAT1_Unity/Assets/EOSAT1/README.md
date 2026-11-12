@@ -79,6 +79,11 @@ In the Editor's Scene view the room only appears while playing.
 | `L` | view frame: Earth below (default) or inertial (ECI axes, up = celestial north) |
 | `M` | data source: Sandbox → Replay → Live link |
 | `H` | info panel |
+| `C` | satellite camera view: off → corner picture → full screen (wheel or `[` `]` zooms it) |
+| `Z` | zoom out to the whole Earth / back to the spacecraft |
+| `O` | orbit path on / off |
+
+The last three also have buttons at the top right of the screen.
 
 Commands (`1`–`5`, `N S R T`) act on the built-in simulator only. With the real simulator,
 commands come from mission control, as they should.
@@ -93,9 +98,32 @@ commands come from mission control, as they should.
 | `X` / `Y` | info panel on the left controller / time 1× → 10× → 60× |
 | Left grip / Menu | pause / restart |
 | Right / left trigger | body axes / camera boresight |
+| Right grip | whole Earth / back to the spacecraft |
+| Right stick click | satellite camera screen (above the right controller) |
+| Left stick click | orbit path on / off |
 
 You start about 3 m behind and to the left of the spacecraft, facing it. It floats with
 its centre at 1.45 m, so you look slightly down at the cameras' side and up at the top.
+
+## Satellite camera, whole Earth and orbit path
+
+- **Satellite camera (`C`).** What the DragonEye imagers see: a camera on the camera face
+  looking along the boresight (+Z), flight direction at the top of the picture. It starts
+  45° wide so you can tell where you are; zoom in as far as the real field of view, about
+  5.1° (the two imagers together cover a 44 km wide strip from 500 km). A box in the middle
+  marks that real view while you are zoomed out. The Earth texture is too coarse to show
+  detail at the real zoom; a sharper Earth map fixes that (see Credits and limits).
+- **Whole Earth (`Z`).** The Earth becomes a 1 m globe, north up, with the spacecraft going
+  round it and the Moon at its true distance (30 m away on this scale; zoom out with the
+  wheel). The orbit height, the Earth, the Moon and the day/night line are to scale. Only the
+  spacecraft is drawn bigger (it would be a speck) and marked with a yellow dot. In the
+  headset the globe floats where the spacecraft was, and you can walk around it.
+- **Orbit path (`O`, on by default).** One full orbit, worked out from the spacecraft's
+  position and velocity at that moment, so the line always passes through it. Bright = still
+  ahead, dim = already flown, violet = inside Earth's shadow (where the eclipse happens).
+
+The satellite camera and the whole-Earth view cannot be on together; choosing one closes the
+other. These views are built when the scene starts, so there is nothing to rebuild.
 
 ## The info panel answers slide 17's four questions
 
@@ -253,9 +281,11 @@ EOSAT1/
                     MenuKit (quads, text, buttons), MenuSettings (remembered choices)
   Scripts/Unity/    EosatApp (conductor), SpaceScene (Earth/Sun/Moon/stars placement),
                     SatelliteView + DeployableJoint, InfoPanel, DesktopControls, VrRig,
+                    ViewDirector (satellite camera, whole Earth, buttons), OrbitPathView,
                     InputShim, SimToUnity, ProceduralMeshes, FaceCamera
   Editor/           EosatSceneBuilder (the EOSAT-1 menu; builds the spacecraft from the parts list)
                     EosatMenuTools (menu scene helpers; Play starts at the main menu)
+  Resources/        EosatScreen.shader (the satellite camera screen in the headset)
   Shaders/          Planet, Atmosphere, SunGlow, Stars, UnlitColor, GlowAdditive, GridFloor, HudText
                     Room, UiPanel, MapScreen, ConsoleScreen (main menu)
   Textures/         earth_day, earth_night, moon; panel_a/panel_b (+ _mask), mli_gold (+ _normal)

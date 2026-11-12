@@ -95,6 +95,9 @@ namespace Eosat1
             pushToTimeline = f => timeline.Push(f);
             MenuSettings.ApplyTo(this);   // choices from the main menu, when started from it
             ApplyLinkOverrides();
+            // extra views (satellite camera, whole Earth, orbit path): added here so scenes built
+            // before they existed get them without a rebuild
+            if (GetComponent<ViewDirector>() == null) gameObject.AddComponent<ViewDirector>();
         }
 
         void Start()

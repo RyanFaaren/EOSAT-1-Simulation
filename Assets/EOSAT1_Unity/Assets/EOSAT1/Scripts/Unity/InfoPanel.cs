@@ -94,6 +94,7 @@ namespace Eosat1
                     : "Mouse drag orbit  wheel zoom  V views  F reset | " +
                       (app.CanControlTime ? "Space pause  - = speed  <- -> jump  Backspace restart | " : "") +
                       "G axes  B boresight  L frame  M source  H panel  Esc menu";
+                help += "\nC satellite camera (wheel or [ ] zooms it)  Z whole Earth  O orbit path";
                 var hc = new GUIContent(help);
                 Vector2 hs = helpStyle.CalcSize(hc);
                 GUI.Box(new Rect(10, Screen.height - hs.y - 10, Mathf.Min(hs.x, Screen.width - 20), hs.y), hc, helpStyle);
