@@ -52,6 +52,18 @@ namespace Eosat1
         public float sunQuadToDisc = 24f;
         public float footprintSizeKm = 30f;
 
+        [Header("Whole-Earth view")]
+        [Tooltip("Zoomed out: the Earth sits at this object's origin as a globe, north up, with the spacecraft going round it. Distances to the Earth, the orbit and the Moon stay to scale; only the spacecraft is drawn bigger.")]
+        public bool overview;
+        [Tooltip("Radius of the Earth globe in the whole-Earth view (Unity metres).")]
+        public float overviewEarthRadius = 0.5f;
+        [Tooltip("Size of the spacecraft in the whole-Earth view (1 = life size). To scale it would be far too small to see.")]
+        public float overviewSatelliteScale = 0.03f;
+        [Tooltip("How far away the Sun and stars are drawn in the whole-Earth view (beyond the Moon, which is at its true distance).")]
+        public float overviewSkyDistance = 120f;
+        [Tooltip("Optional dot that marks the spacecraft in the whole-Earth view (it stays visible in eclipse).")]
+        public Transform overviewMarker;
+
         [Header("Light")]
         public float sunIntensity = 1.5f;
         [Tooltip("Light from the sunlit Earth below, on the Earth-facing side of the spacecraft.")]
@@ -65,12 +77,33 @@ namespace Eosat1
         public double Illumination { get { return illum; } }
         /// <summary>The frame currently used: rotation from ECI into this transform's (simulator-axes) frame.</summary>
         public QuatD SceneFromEci { get { return qSE; } }
+        /// <summary>Unity metres per kilometre in use right now (differs from metresPerKm in the whole-Earth view).</summary>
+        public double ActiveMetresPerKm { get { return activeKm; } }
+        /// <summary>The point, in ECI km, that sits at this transform's origin: the spacecraft, or Earth's centre in the whole-Earth view.</summary>
+        public Vec3d OriginEciKm { get { return originEci; } }
+        /// <summary>Unit normal of the orbit plane (ECI), as used for the view frame.</summary>
+        public Vec3d OrbitNormalEci { get { return orbitNormal; } }
+        /// <summary>True once Apply has run with good data.</summary>
+        public bool HasFrame { get { return hasFrame; } }
+        /// <summary>Far clip distance the scene needs right now.</summary>
+        public float FarClip { get { return farClip; } }
+
+        /// <summary>Where a point given in ECI km is drawn, in this transform's local space.</summary>
+        public Vector3 LocalFromEciKm(Vec3d pEciKm)
+        {
+            return SimToUnity.Vec(qSE.Rotate(pEciKm - originEci) * activeKm);
+        }
 
         QuatD qSE = QuatD.Identity;
         bool hasFrame;
         double illum = 1.0;
         int lastDiscontinuity = int.MinValue;
         ViewFrame lastViewFrame;
+        bool lastOverview;
+        double activeKm = 1.0;
+        Vec3d originEci = Vec3d.Zero;
+        Vec3d orbitNormal = Vec3d.UnitZ;
+        float farClip = 3500f;
         readonly OrbitNormalEstimator normals = new OrbitNormalEstimator();
         double lastNormalFeedT = double.NaN;
 
@@ -120,9 +153,10 @@ namespace Eosat1
         public void Apply(DisplayState s, float dt)
         {
             if (s == null || !s.Valid) return;
-            bool snap = s.Discontinuity != lastDiscontinuity || !hasFrame || lastViewFrame != viewFrame;
+            bool snap = s.Discontinuity != lastDiscontinuity || !hasFrame || lastViewFrame != viewFrame || lastOverview != overview;
             lastDiscontinuity = s.Discontinuity;
             lastViewFrame = viewFrame;
+            lastOverview = overview;
 
             Vec3d r = s.PosEciKm;
             double rLen = r.Length;
@@ -139,9 +173,13 @@ namespace Eosat1
             else if (normals.HasNormal) h = normals.Normal;
             else h = LocalFrame.NormalAssumingNorthbound(r);
 
-            QuatD target = viewFrame == ViewFrame.EarthBelow ? LocalFrame.EciToLocal(r, h) : QuatD.Identity;
+            orbitNormal = h;
+
+            // the whole-Earth view is always inertial (north up): the Earth turns, the orbit stays put
+            bool inertial = overview || viewFrame == ViewFrame.Inertial;
+            QuatD target = inertial ? QuatD.Identity : LocalFrame.EciToLocal(r, h);
             bool exactVelocity = s.HasVelocity && !s.VelocityEstimated;
-            if (snap || exactVelocity || viewFrame == ViewFrame.Inertial) qSE = target;
+            if (snap || exactVelocity || inertial) qSE = target;
             else
             {
                 // smooth out small steps in the estimated orbit normal; faster when time runs faster
@@ -150,20 +188,31 @@ namespace Eosat1
             }
             hasFrame = true;
 
-            double km = metresPerKm;
+            double R = Ephemeris.EarthRadiusKm;
+            double km = overview ? Math.Max(1e-6, overviewEarthRadius) / R : metresPerKm;
             double sim = s.SimTime;
+            activeKm = km;
+            originEci = overview ? Vec3d.Zero : r;
+            // close view: the spacecraft is at the origin. Whole-Earth view: the Earth is.
+            Vector3 satLocal = overview ? SimToUnity.Vec(qSE.Rotate(r) * km) : Vector3.zero;
 
             // ---------------------------------------------------------------- spacecraft
             QuatD qSB = qSE * s.QBodyToEci;
             if (satellite != null)
             {
-                satellite.localPosition = Vector3.zero;
+                satellite.localPosition = satLocal;
                 satellite.localRotation = SimToUnity.Rot(qSB);
+                float satScale = overview ? Mathf.Max(1e-4f, overviewSatelliteScale) : 1f;
+                if (Mathf.Abs(satellite.localScale.x - satScale) > 1e-6f) satellite.localScale = Vector3.one * satScale;
+            }
+            if (overviewMarker != null)
+            {
+                if (overviewMarker.gameObject.activeSelf != overview) overviewMarker.gameObject.SetActive(overview);
+                if (overview) overviewMarker.localPosition = satLocal;
             }
 
             // ---------------------------------------------------------------- Earth
-            double R = Ephemeris.EarthRadiusKm;
-            Vec3d earthCenter = qSE.Rotate(-r) * km;
+            Vec3d earthCenter = overview ? Vec3d.Zero : qSE.Rotate(-r) * km;
             if (earth != null)
             {
                 earth.localPosition = SimToUnity.Vec(earthCenter);
@@ -171,7 +220,7 @@ namespace Eosat1
                 earth.localScale = Vector3.one * (float)(R * km);
             }
             double horizon = Math.Sqrt(Math.Max(1.0, rLen * rLen - R * R)) * km;
-            double sky = horizon * Math.Max(1.01, skyBeyondHorizon);
+            double sky = overview ? Math.Max(10.0, overviewSkyDistance) : horizon * Math.Max(1.01, skyBeyondHorizon);
 
             // ---------------------------------------------------------------- Sun
             Vec3d sunDirEci = s.HasSun ? s.SunDirEci : (Ephemeris.SunEci(sim, eciConvention) - r).Normalized;
@@ -228,9 +277,18 @@ namespace Eosat1
                 Vec3d rMoon = Ephemeris.MoonEci(sim, eciConvention);
                 Vec3d rel = rMoon - r;
                 double dist = rel.Length;
-                float d = (float)(sky * 0.97);
-                moon.localPosition = SimToUnity.Vec(qSE.Rotate(rel / dist)) * d;
-                moon.localScale = Vector3.one * (float)(d * Ephemeris.MoonRadiusKm / dist);
+                if (overview)
+                {
+                    // true distance and size, on the same scale as the Earth
+                    moon.localPosition = SimToUnity.Vec(qSE.Rotate(rMoon) * km);
+                    moon.localScale = Vector3.one * (float)(Ephemeris.MoonRadiusKm * km);
+                }
+                else
+                {
+                    float d = (float)(sky * 0.97);
+                    moon.localPosition = SimToUnity.Vec(qSE.Rotate(rel / dist)) * d;
+                    moon.localScale = Vector3.one * (float)(d * Ephemeris.MoonRadiusKm / dist);
+                }
                 Vec3d xm = (-rMoon).Normalized;    // near side faces Earth
                 Vec3d pole = AstroTime.J2000ToEci(sim, eciConvention).Rotate(Ephemeris.EclipticPoleJ2000());
                 Vec3d zm = Vec3d.RejectFrom(pole, xm).Normalized;
@@ -252,7 +310,7 @@ namespace Eosat1
                 bool show = false;
                 if (FootprintEnabled)
                 {
-                    Vector3 c = SimToUnity.Vec(earthCenter);
+                    Vector3 c = SimToUnity.Vec(earthCenter) - satLocal;   // Earth's centre as seen from the spacecraft
                     Vector3 dir = SimToUnity.Vec(qSB.Rotate(Vec3d.UnitZ)).normalized;
                     float radius = (float)(R * km);
                     float b = -Vector3.Dot(dir, c);
@@ -263,9 +321,11 @@ namespace Eosat1
                         if (tHit > 0f)
                         {
                             Vector3 hit = dir * tHit;
-                            footprint.localPosition = hit;
+                            footprint.localPosition = satLocal + hit;
                             footprint.localRotation = Quaternion.FromToRotation(Vector3.up, (hit - c).normalized);
-                            footprint.localScale = Vector3.one * (float)(footprintSizeKm * km);
+                            float ringSize = (float)(footprintSizeKm * km);
+                            if (overview) ringSize = Mathf.Max(ringSize, 0.06f * overviewEarthRadius);   // big enough to see
+                            footprint.localScale = Vector3.one * ringSize;
                             show = true;
                         }
                     }
@@ -280,7 +340,9 @@ namespace Eosat1
                 Shader.SetGlobalFloat(EarthRadiusId, (float)(R * km * transform.lossyScale.x));
                 Shader.SetGlobalFloat(AtmoScaleId, (float)(22.0 * km * transform.lossyScale.x));
             }
-            float far = (float)(sky * 1.12 + 20.0);
+            // close view: reach to where the orbit path sets behind the Earth's edge (twice the horizon distance)
+            float far = overview ? (float)(sky * 1.12 + 20.0) : (float)(Math.Max(sky * 1.12, horizon * 2.06) + 20.0);
+            farClip = far;
             for (int i = 0; i < cameras.Length; i++)
             {
                 if (cameras[i] != null && Mathf.Abs(cameras[i].farClipPlane - far) > 1f) cameras[i].farClipPlane = far;

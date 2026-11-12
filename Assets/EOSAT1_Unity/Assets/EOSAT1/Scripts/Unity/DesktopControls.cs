@@ -36,6 +36,26 @@ namespace Eosat1
         float yaw, pitch;
         int view;
 
+        // whole-Earth view: the camera orbits the Earth globe instead of the spacecraft
+        bool overview;
+        Vector3 overviewFocus;
+        float overviewRadius = 0.5f;
+        float overviewYaw = -35f, overviewPitch = 20f, overviewDistance;
+
+        /// <summary>Set while something else uses the mouse wheel (the satellite camera's zoom).</summary>
+        public bool WheelBusy { get; set; }
+
+        /// <summary>Switch between orbiting the spacecraft and orbiting the whole Earth (a globe of the given radius).</summary>
+        public void SetOverview(bool on, Vector3 focusWorld, float earthRadius)
+        {
+            bool entering = on && !overview;
+            overview = on;
+            overviewFocus = focusWorld;
+            overviewRadius = Mathf.Max(0.01f, earthRadius);
+            // far enough that the Earth and the whole orbit fit on screen with room to spare
+            if (entering || overviewDistance <= 0f) overviewDistance = overviewRadius * 3.6f;
+        }
+
         void Start()
         {
             SetView(0);
@@ -54,13 +74,30 @@ namespace Eosat1
             // camera (the headset owns the camera when one is active)
             if (!UnityEngine.XR.XRSettings.isDeviceActive && cameraTransform != null && target != null)
             {
+                float scroll = WheelBusy ? 0f : InputShim.Scroll();
+                if (overview)
+                {
+                    if (InputShim.MouseHeld(0) || InputShim.MouseHeld(1))
+                    {
+                        Vector2 d = InputShim.MouseDelta();
+                        overviewYaw += d.x * degreesPerPixel;
+                        overviewPitch = Mathf.Clamp(overviewPitch - d.y * degreesPerPixel, -89f, 89f);
+                    }
+                    // from just above the surface out to beyond the Moon (60 Earth radii away)
+                    if (Mathf.Abs(scroll) > 0.001f)
+                        overviewDistance = Mathf.Clamp(overviewDistance * Mathf.Pow(0.88f, scroll), overviewRadius * 1.25f, overviewRadius * 90f);
+                    Quaternion orot = Quaternion.Euler(overviewPitch, overviewYaw, 0f);
+                    cameraTransform.position = overviewFocus - orot * Vector3.forward * overviewDistance;
+                    cameraTransform.rotation = orot;
+                }
+                else
+                {
                 if (InputShim.MouseHeld(0) || InputShim.MouseHeld(1))
                 {
                     Vector2 d = InputShim.MouseDelta();
                     yaw += d.x * degreesPerPixel;
                     pitch = Mathf.Clamp(pitch - d.y * degreesPerPixel, -89f, 89f);
                 }
-                float scroll = InputShim.Scroll();
                 if (Mathf.Abs(scroll) > 0.001f) distance = Mathf.Clamp(distance * Mathf.Pow(0.88f, scroll), minDistance, maxDistance);
                 if (InputShim.Held(KeyCode.LeftArrow) && InputShim.Held(KeyCode.LeftShift)) yaw -= 60f * Time.unscaledDeltaTime;
                 if (InputShim.Held(KeyCode.RightArrow) && InputShim.Held(KeyCode.LeftShift)) yaw += 60f * Time.unscaledDeltaTime;
@@ -70,6 +107,7 @@ namespace Eosat1
                 Quaternion rot = Quaternion.Euler(pitch, yaw, 0f);
                 cameraTransform.position = target.position - rot * Vector3.forward * distance;
                 cameraTransform.rotation = rot;
+                }
             }
 
             // back to the main menu (when the menu scene is in the build list)
