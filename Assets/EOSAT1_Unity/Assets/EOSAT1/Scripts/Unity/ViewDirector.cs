@@ -10,8 +10,11 @@
 //                         and the Moon at its true distance. Everything is to scale except
 //                         the spacecraft itself, which is drawn bigger so it can be seen.
 //   Orbit path (O)        the line the spacecraft follows (see OrbitPathView).
+//   Panel axes (P)        an arrow from each solar panel along the direction its cells face,
+//                         so you can see where the panels point (at the Sun or not) as the
+//                         spacecraft turns and as the panels fold out.
 //
-// Desktop also gets three buttons at the top right. Headset: right grip = whole Earth,
+// Desktop also gets a button for each at the top right, styled like the main menu. Headset: right grip = whole Earth,
 // right stick click = camera screen, left stick click = orbit path.
 //
 // EosatApp adds this component by itself at start, and it builds what it needs (camera,
@@ -49,6 +52,12 @@ namespace Eosat1
         [Header("Orbit path")]
         public bool pathVisible = true;
 
+        [Header("Solar panel axes")]
+        public bool panelAxesVisible = true;
+        [Tooltip("Length of each arrow in metres (the spacecraft is 1.4 m across).")]
+        public float panelAxisLength = 1.1f;
+        public Color panelAxisColor = new Color(1f, 0.6f, 0.12f);
+
         public bool Overview { get { return space != null && space.overview; } }
         public static float TrueFieldOfViewDeg
         {
@@ -62,10 +71,13 @@ namespace Eosat1
         Material vrScreenMaterial;
         Mesh vrScreenMesh, markerMesh;
         bool ready;
-        GUIStyle buttonStyle, buttonOnStyle, labelStyle;
-        int styleScreenHeight;
-        readonly Rect[] buttonRects = new Rect[3];
-        string cameraLabel = "";
+        const int ButtonCount = 4;
+        readonly Rect[] buttonRects = new Rect[ButtonCount];
+        Rect buttonPanel;
+        readonly System.Collections.Generic.List<GameObject> panelAxes = new System.Collections.Generic.List<GameObject>();
+        Mesh arrowMesh;
+        Material arrowMaterial;
+        string cameraLabel = "", cameraLabelShort = "";
         float nextLabel;
 
         static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
@@ -88,6 +100,7 @@ namespace Eosat1
             BuildMarker();
             BuildSatCamera();
             BuildVrScreen();
+            BuildPanelAxes();
             HideOverlaysFromSatCamera();
             ready = true;
             ApplyState();
@@ -104,6 +117,94 @@ namespace Eosat1
             if (vrScreenMaterial != null) Destroy(vrScreenMaterial);
             if (vrScreenMesh != null) Destroy(vrScreenMesh);
             if (markerMesh != null) Destroy(markerMesh);
+            if (arrowMesh != null) Destroy(arrowMesh);
+            if (arrowMaterial != null) Destroy(arrowMaterial);
+        }
+
+        void BuildPanelAxes()
+        {
+            if (satelliteView == null) return;
+            Shader sh = Shader.Find("EOSAT1/UnlitColor");
+            if (sh == null) sh = Shader.Find("Universal Render Pipeline/Unlit");
+            if (sh == null) sh = Shader.Find("Unlit/Color");
+            if (sh == null) return;
+            arrowMaterial = new Material(sh) { name = "EOSAT1 Panel Axis (runtime)" };
+            if (arrowMaterial.HasProperty("_Color")) arrowMaterial.SetColor("_Color", panelAxisColor);
+            if (arrowMaterial.HasProperty("_BaseColor")) arrowMaterial.SetColor("_BaseColor", panelAxisColor);
+            arrowMesh = ArrowMesh(Mathf.Max(0.2f, panelAxisLength), 0.006f, 0.026f, 0.11f, 16);
+            AddPanelAxis(satelliteView.cellsMinusY, "PANEL -Y");
+            AddPanelAxis(satelliteView.cellsPlusY, "PANEL +Y");
+        }
+
+        /// <summary>An arrow out of the cell side of one solar panel (the panel's local +Z).</summary>
+        void AddPanelAxis(Transform panel, string label)
+        {
+            if (panel == null) return;
+            var go = new GameObject("Panel Pointing Axis");
+            go.transform.SetParent(panel, false);
+            go.AddComponent<MeshFilter>().sharedMesh = arrowMesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = arrowMaterial;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+
+            // a label at the tip, in the same text style as the body axes' labels
+            TextMesh like = satelliteView.jamLabel != null ? satelliteView.jamLabel.GetComponent<TextMesh>() : null;
+            MeshRenderer likeRenderer = satelliteView.jamLabel != null ? satelliteView.jamLabel.GetComponent<MeshRenderer>() : null;
+            if (like != null && likeRenderer != null && like.font != null)
+            {
+                var lg = new GameObject("Label");
+                lg.transform.SetParent(go.transform, false);
+                lg.transform.localPosition = new Vector3(0f, 0f, panelAxisLength + 0.1f);
+                var tm = lg.AddComponent<TextMesh>();
+                tm.font = like.font;
+                tm.fontSize = 48;
+                tm.characterSize = 0.009f;
+                tm.anchor = TextAnchor.MiddleCenter;
+                tm.alignment = TextAlignment.Center;
+                tm.color = Color.Lerp(panelAxisColor, Color.white, 0.35f);
+                tm.text = label;
+                var lr = lg.GetComponent<MeshRenderer>();
+                lr.sharedMaterial = likeRenderer.sharedMaterial;
+                lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                lr.receiveShadows = false;
+                lg.AddComponent<FaceCamera>();
+            }
+            SetLayer(go);
+            go.SetActive(panelAxesVisible);
+            panelAxes.Add(go);
+        }
+
+        /// <summary>A shaft and a cone head along +Z, starting at the origin.</summary>
+        static Mesh ArrowMesh(float length, float shaftRadius, float headRadius, float headLength, int sides)
+        {
+            var v = new System.Collections.Generic.List<Vector3>();
+            var t = new System.Collections.Generic.List<int>();
+            float neck = length - headLength;
+            for (int i = 0; i < sides; i++)
+            {
+                float a = 2f * Mathf.PI * i / sides;
+                float c = Mathf.Cos(a), sn = Mathf.Sin(a);
+                v.Add(new Vector3(c * shaftRadius, sn * shaftRadius, 0f));     // 4 per side: shaft start,
+                v.Add(new Vector3(c * shaftRadius, sn * shaftRadius, neck));   // shaft end,
+                v.Add(new Vector3(c * headRadius, sn * headRadius, neck));     // head base,
+                v.Add(new Vector3(0f, 0f, length));                            // tip
+            }
+            for (int i = 0; i < sides; i++)
+            {
+                int a0 = i * 4, b0 = ((i + 1) % sides) * 4;
+                t.Add(a0); t.Add(a0 + 1); t.Add(b0);            // shaft
+                t.Add(b0); t.Add(a0 + 1); t.Add(b0 + 1);
+                t.Add(a0 + 1); t.Add(a0 + 2); t.Add(b0 + 1);    // the flat back of the head
+                t.Add(b0 + 1); t.Add(a0 + 2); t.Add(b0 + 2);
+                t.Add(a0 + 2); t.Add(a0 + 3); t.Add(b0 + 2);    // the cone
+            }
+            var m = new Mesh { name = "EOSAT1 Arrow" };
+            m.SetVertices(v);
+            m.SetTriangles(t, 0);
+            m.RecalculateNormals();
+            m.RecalculateBounds();
+            return m;
         }
 
         void BuildPath()
@@ -249,6 +350,14 @@ namespace Eosat1
             app.Say(pathVisible ? "Orbit path shown: bright = ahead, dim = behind, violet = in Earth's shadow" : "Orbit path hidden");
         }
 
+        public void TogglePanelAxes()
+        {
+            if (!ready) return;
+            panelAxesVisible = !panelAxesVisible;
+            ApplyState();
+            app.Say(panelAxesVisible ? "Panel axes shown: each arrow points the way that panel's solar cells face" : "Panel axes hidden");
+        }
+
         public void ZoomSatCamera(float notches)
         {
             fieldOfViewDeg = Mathf.Clamp(fieldOfViewDeg * Mathf.Pow(0.85f, notches), TrueFieldOfViewDeg, maxFieldOfViewDeg);
@@ -260,6 +369,8 @@ namespace Eosat1
             if (space.overview && display != SatCameraDisplay.Off) display = SatCameraDisplay.Off;
             if (desktop != null) desktop.SetOverview(space.overview, space.transform.position, space.overviewEarthRadius * space.transform.lossyScale.x);
             if (path != null && path.gameObject.activeSelf != pathVisible) path.gameObject.SetActive(pathVisible);
+            for (int i = 0; i < panelAxes.Count; i++)
+                if (panelAxes[i] != null && panelAxes[i].activeSelf != panelAxesVisible) panelAxes[i].SetActive(panelAxesVisible);
         }
 
         // ------------------------------------------------------------------ every frame
@@ -271,6 +382,7 @@ namespace Eosat1
             if (InputShim.Down(KeyCode.Z)) ToggleOverview();
             if (InputShim.Down(KeyCode.C)) CycleSatCamera();
             if (InputShim.Down(KeyCode.O)) TogglePath();
+            if (InputShim.Down(KeyCode.P)) TogglePanelAxes();
             if (display != SatCameraDisplay.Off)
             {
                 if (InputShim.Down(KeyCode.LeftBracket)) ZoomSatCamera(-1f);
@@ -293,6 +405,7 @@ namespace Eosat1
                 if (buttonRects[0].Contains(p)) CycleSatCamera();
                 else if (buttonRects[1].Contains(p)) ToggleOverview();
                 else if (buttonRects[2].Contains(p)) TogglePath();
+                else if (buttonRects[3].Contains(p)) TogglePanelAxes();
             }
 
             UpdateSatCamera(headset);
@@ -355,114 +468,103 @@ namespace Eosat1
             double offNadir = Vec3d.Angle(boresight, -s.PosEciKm) * MathUtil.Rad2Deg;
             double across = 2.0 * alt * System.Math.Tan(0.5 * fieldOfViewDeg * MathUtil.Deg2Rad);
             bool atTrue = fieldOfViewDeg <= TrueFieldOfViewDeg * 1.01f;
-            string text = "DragonEye view   " + fieldOfViewDeg.ToString("0.0", Inv) + " deg";
+            string text = "<b><color=" + HudStyle.AccentHex + ">" + HudStyle.Spaced("DRAGONEYE") + "</color></b>     " + fieldOfViewDeg.ToString("0.0", Inv) + " deg";
             if (offNadir < 60.0) text += "   about " + across.ToString("0", Inv) + " km across";
             if (atTrue) text += "   (the real field of view)";
             text += "   " + offNadir.ToString("0.0", Inv) + " deg off nadir";
-            if (space.Illumination < 0.5) text += "   ECLIPSE";
+            if (space.Illumination < 0.5) text += "   <color=" + HudStyle.WarnHex + ">ECLIPSE</color>";
             cameraLabel = text;
+            cameraLabelShort = "<b><color=" + HudStyle.AccentHex + ">DRAGONEYE</color></b>   " + fieldOfViewDeg.ToString("0.0", Inv) + " deg"
+                               + (offNadir < 60.0 ? "   " + across.ToString("0", Inv) + " km across" : "");
         }
 
         // ------------------------------------------------------------------ on screen (desktop)
         void LayoutButtons()
         {
-            float bh = Mathf.Max(26f, Screen.height / 30f);
-            float bw = bh * 6.4f;
-            float x = Screen.width - bw - 10f;
-            for (int i = 0; i < 3; i++) buttonRects[i] = new Rect(x, 10f + i * (bh + 6f), bw, bh);
+            float u = HudStyle.Unit;
+            float pad = Mathf.Round(u * 0.7f);
+            float bh = Mathf.Round(u * 2.1f);
+            float bw = Mathf.Round(u * 13.5f);
+            float head = Mathf.Round(u * 1.7f);
+            float gap = Mathf.Round(u * 0.45f);
+            float x = Screen.width - 12f - pad - bw;
+            float y = 12f + pad + head;
+            for (int i = 0; i < ButtonCount; i++) buttonRects[i] = new Rect(x, y + i * (bh + gap), bw, bh);
+            buttonPanel = new Rect(x - pad, 12f, bw + pad * 2f, pad * 2f + head + ButtonCount * bh + (ButtonCount - 1) * gap);
         }
 
-        void EnsureStyles()
+        static void DrawButton(Rect r, string label, string key, bool on, Vector2 mouse)
         {
-            if (buttonStyle != null && styleScreenHeight == Screen.height) return;
-            styleScreenHeight = Screen.height;
-            buttonStyle = new GUIStyle(GUI.skin.box)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = Mathf.Max(12, Screen.height / 64),
-                wordWrap = false,
-            };
-            buttonStyle.normal.textColor = new Color(0.92f, 0.94f, 0.97f);
-            buttonOnStyle = new GUIStyle(buttonStyle) { fontStyle = FontStyle.Bold };
-            buttonOnStyle.normal.textColor = new Color(0.49f, 0.99f, 0.60f);
-            labelStyle = new GUIStyle(GUI.skin.box)
-            {
-                alignment = TextAnchor.MiddleLeft,
-                fontSize = Mathf.Max(11, Screen.height / 72),
-                wordWrap = false,
-                padding = new RectOffset(8, 8, 4, 4),
-            };
-            labelStyle.normal.textColor = new Color(0.92f, 0.94f, 0.97f);
+            bool hover = r.Contains(mouse);
+            GUIStyle st = on ? (hover ? HudStyle.ButtonOnHover : HudStyle.ButtonOn) : (hover ? HudStyle.ButtonHover : HudStyle.Button);
+            GUI.Box(r, label, st);
+            // the key that does the same, at the right edge
+            var kc = new GUIContent(key);
+            Vector2 ks = HudStyle.SmallDim.CalcSize(kc);
+            GUI.Label(new Rect(r.xMax - ks.x - HudStyle.Unit * 0.7f, r.y + (r.height - ks.y) * 0.5f, ks.x, ks.y), kc, HudStyle.SmallDim);
         }
 
         void OnGUI()
         {
             if (!ready || UnityEngine.XR.XRSettings.isDeviceActive) return;
             if (Event.current.type != EventType.Repaint) return;
-            GUI.depth = 50;   // behind the info panel and the help line
-            EnsureStyles();
+            GUI.depth = 50;   // behind the status panel and the key list
+            HudStyle.Ensure();
             LayoutButtons();
+            float u = HudStyle.Unit;
+            Vector2 mouse = HudStyle.Mouse();
 
             // the satellite camera's picture
             if (display != SatCameraDisplay.Off && target != null && satCamera != null && satCamera.enabled)
             {
                 Rect r;
-                if (display == SatCameraDisplay.Full) r = new Rect(0f, 0f, Screen.width, Screen.height);
+                bool full = display == SatCameraDisplay.Full;
+                if (full) r = new Rect(0f, 0f, Screen.width, Screen.height);
                 else
                 {
                     float size = InsetSize();
-                    r = new Rect(Screen.width - size - 10f, buttonRects[2].yMax + 10f, size, size);
-                    Frame(new Rect(r.x - 2f, r.y - 2f, r.width + 4f, r.height + 4f), new Color(0.75f, 0.8f, 0.9f, 0.9f), 2f);
+                    r = new Rect(Screen.width - size - 14f, buttonPanel.yMax + 12f, size, size);
                 }
                 GUI.DrawTexture(r, target, ScaleMode.StretchToFill, false);
+                if (!full) HudStyle.Frame(new Rect(r.x - 2f, r.y - 2f, r.width + 4f, r.height + 4f), HudStyle.WithAlpha(HudStyle.Accent, 0.85f), 2f);
 
-                // cross at the boresight, and the real instrument's strip when zoomed out
-                Color mark = new Color(1f, 0.82f, 0.4f, 0.9f);
+                // cross at the boresight, and the real instrument's view when zoomed out
+                Color mark = HudStyle.WithAlpha(HudStyle.Amber, 0.9f);
                 Vector2 c = r.center;
                 float arm = Mathf.Max(6f, r.height * 0.02f);
-                Fill(new Rect(c.x - arm, c.y - 0.5f, arm * 2f, 1f), mark);
-                Fill(new Rect(c.x - 0.5f, c.y - arm, 1f, arm * 2f), mark);
+                HudStyle.Fill(new Rect(c.x - arm, c.y - 0.5f, arm * 2f, 1f), mark);
+                HudStyle.Fill(new Rect(c.x - 0.5f, c.y - arm, 1f, arm * 2f), mark);
                 float trueFraction = Mathf.Tan(0.5f * TrueFieldOfViewDeg * Mathf.Deg2Rad) / Mathf.Tan(0.5f * fieldOfViewDeg * Mathf.Deg2Rad);
                 if (trueFraction < 0.7f)
                 {
                     float bw = Mathf.Max(8f, r.width * trueFraction);
-                    Frame(new Rect(c.x - bw * 0.5f, c.y - bw * 0.5f, bw, bw), mark, 1f);
+                    HudStyle.Frame(new Rect(c.x - bw * 0.5f, c.y - bw * 0.5f, bw, bw), mark, 1f);
                 }
 
-                var lc = new GUIContent(display == SatCameraDisplay.Full
-                    ? cameraLabel + (trueFraction < 0.7f ? "   box = the real 44 km wide view" : "") + "   |   wheel or [ ] zoom   C close"
-                    : cameraLabel);
-                Vector2 ls = labelStyle.CalcSize(lc);
-                float lw = Mathf.Min(ls.x, display == SatCameraDisplay.Full ? Screen.width - 20f : r.width);
-                Rect lr = display == SatCameraDisplay.Full
-                    ? new Rect((Screen.width - lw) * 0.5f, 10f, lw, ls.y)
-                    : new Rect(r.x, r.yMax + 4f, lw, ls.y);
-                GUI.Box(lr, lc, labelStyle);
+                string text = full ? cameraLabel : cameraLabelShort;
+                if (full) text += (trueFraction < 0.7f ? "     box = the real 44 km wide view" : "")
+                                  + "     <color=" + HudStyle.DimHex + ">wheel or [ ] zoom     C close</color>";
+                var lc = new GUIContent(text);
+                Vector2 ls = HudStyle.Small.CalcSize(lc);
+                float lp = Mathf.Round(u * 0.6f);
+                float lw = Mathf.Min(ls.x + lp * 2f, full ? Screen.width - 24f : r.width + 4f);
+                float lh = ls.y + lp;
+                Rect lr = full ? new Rect((Screen.width - lw) * 0.5f, 12f, lw, lh) : new Rect(r.xMax + 2f - lw, r.yMax + 8f, lw, lh);
+                HudStyle.DrawPanel(lr);
+                GUI.Label(new Rect(lr.x + lp, lr.y + lp * 0.5f, lr.width - lp * 2f, ls.y), lc, HudStyle.Small);
             }
 
             // the buttons
+            HudStyle.DrawPanel(buttonPanel);
+            GUI.Label(new Rect(buttonRects[0].x, buttonPanel.y + Mathf.Round(u * 0.7f), buttonRects[0].width, u * 1.5f),
+                      HudStyle.Spaced("VIEWS"), HudStyle.Header);
             bool overview = space.overview;
-            string camText = display == SatCameraDisplay.Off ? "Satellite camera  (C)"
-                : (display == SatCameraDisplay.Inset ? "Satellite camera: corner  (C)" : "Satellite camera: full  (C)");
-            GUI.Box(buttonRects[0], camText, display != SatCameraDisplay.Off ? buttonOnStyle : buttonStyle);
-            GUI.Box(buttonRects[1], overview ? "Back to the satellite  (Z)" : "Zoom out: whole Earth  (Z)", overview ? buttonOnStyle : buttonStyle);
-            GUI.Box(buttonRects[2], pathVisible ? "Orbit path: on  (O)" : "Orbit path: off  (O)", pathVisible ? buttonOnStyle : buttonStyle);
-        }
-
-        static void Fill(Rect r, Color c)
-        {
-            Color old = GUI.color;
-            GUI.color = c;
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-            GUI.color = old;
-        }
-
-        static void Frame(Rect r, Color c, float t)
-        {
-            Fill(new Rect(r.x, r.y, r.width, t), c);
-            Fill(new Rect(r.x, r.yMax - t, r.width, t), c);
-            Fill(new Rect(r.x, r.y, t, r.height), c);
-            Fill(new Rect(r.xMax - t, r.y, t, r.height), c);
+            string camText = display == SatCameraDisplay.Off ? "Satellite camera"
+                : (display == SatCameraDisplay.Inset ? "Satellite camera: corner" : "Satellite camera: full");
+            DrawButton(buttonRects[0], camText, "C", display != SatCameraDisplay.Off, mouse);
+            DrawButton(buttonRects[1], overview ? "Back to the satellite" : "Whole Earth", "Z", overview, mouse);
+            DrawButton(buttonRects[2], "Orbit path", "O", pathVisible, mouse);
+            DrawButton(buttonRects[3], "Panel axes", "P", panelAxesVisible, mouse);
         }
     }
 }

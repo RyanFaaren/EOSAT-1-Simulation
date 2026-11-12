@@ -3,6 +3,7 @@
 // sun? Did the antenna come out? Plus where it is, the time, and the link health.
 // Desktop: drawn on screen (H toggles). Headset: a panel on the left controller (X toggles).
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using Eosat1.Core;
@@ -25,7 +26,13 @@ namespace Eosat1
         readonly StringBuilder sb = new StringBuilder(1024);
         string text = "";
         float nextRefresh;
-        GUIStyle boxStyle, helpStyle;
+        readonly List<string> rowLabels = new List<string>();
+        readonly List<string> rowValues = new List<string>();
+        string rowLabel = "";
+        int rowStart = -1;
+        string headerTime = "", headerChip = "";
+        List<string> helpLines, helpHeads;
+        int helpFlags = -1;
 
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -67,44 +74,147 @@ namespace Eosat1
         void OnGUI()
         {
             if (UnityEngine.XR.XRSettings.isDeviceActive || app == null) return;
-            if (boxStyle == null)
-            {
-                boxStyle = new GUIStyle(GUI.skin.box)
-                {
-                    alignment = TextAnchor.UpperLeft,
-                    richText = true,
-                    fontSize = Mathf.Max(12, Screen.height / 60),
-                    wordWrap = false,
-                    padding = new RectOffset(10, 10, 8, 8),
-                };
-                boxStyle.normal.textColor = new Color(0.92f, 0.94f, 0.97f);
-                helpStyle = new GUIStyle(boxStyle) { fontSize = Mathf.Max(11, Screen.height / 72) };
-            }
-            if (showOnScreen)
-            {
-                var content = new GUIContent(text);
-                Vector2 size = boxStyle.CalcSize(content);
-                GUI.Box(new Rect(10, 10, size.x, size.y), content, boxStyle);
-            }
-            if (showHelp)
-            {
-                string help = app.CanCommand
-                    ? "Mouse drag orbit  wheel zoom  V views  F reset | Space pause  - = speed  <- -> jump  Backspace restart | " +
-                      "1 2 wings  3 antenna  4 jam  5 stow | N nadir  S sun  R roll  T tumble | G axes  B boresight  L frame  M source  H panel  Esc menu"
-                    : "Mouse drag orbit  wheel zoom  V views  F reset | " +
-                      (app.CanControlTime ? "Space pause  - = speed  <- -> jump  Backspace restart | " : "") +
-                      "G axes  B boresight  L frame  M source  H panel  Esc menu";
-                help += "\nC satellite camera (wheel or [ ] zooms it)  Z whole Earth  O orbit path";
-                var hc = new GUIContent(help);
-                Vector2 hs = helpStyle.CalcSize(hc);
-                GUI.Box(new Rect(10, Screen.height - hs.y - 10, Mathf.Min(hs.x, Screen.width - 20), hs.y), hc, helpStyle);
-            }
-            if (!string.IsNullOrEmpty(app.LastMessage) && Time.unscaledTime - app.LastMessageTime < 4f)
+            if (Event.current.type != EventType.Repaint) return;
+            HudStyle.Ensure();
+            float u = HudStyle.Unit;
+            float pad = Mathf.Round(u * 0.8f);
+            float margin = 12f;
+
+            if (showOnScreen) DrawStatus(u, pad, margin);
+            if (showHelp) DrawHelp(u, pad, margin);
+
+            // the latest message, for a few seconds, fading out at the end
+            float age = Time.unscaledTime - app.LastMessageTime;
+            if (!string.IsNullOrEmpty(app.LastMessage) && age < 4f)
             {
                 var mc = new GUIContent(app.LastMessage);
-                Vector2 ms = helpStyle.CalcSize(mc);
-                GUI.Box(new Rect((Screen.width - ms.x) * 0.5f, Screen.height * 0.12f, ms.x, ms.y), mc, helpStyle);
+                Vector2 ms = HudStyle.Toast.CalcSize(mc);
+                Color old = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01((4f - age) / 0.6f));
+                GUI.Box(new Rect((Screen.width - ms.x) * 0.5f, Screen.height * 0.12f, ms.x, ms.y), mc, HudStyle.Toast);
+                GUI.color = old;
             }
+        }
+
+        /// <summary>The status panel, top left: a heading, the time, then one row per question.</summary>
+        void DrawStatus(float u, float pad, float margin)
+        {
+            float rowH = Mathf.Round(u * 1.5f);
+            float gap = Mathf.Round(u * 1.1f);
+            var title = new GUIContent(HudStyle.Spaced("EOSAT-1"));
+            var time = new GUIContent(headerTime);
+            var chip = new GUIContent(headerChip);
+            Vector2 titleSize = HudStyle.Header.CalcSize(title);
+            Vector2 timeSize = HudStyle.Dim.CalcSize(time);
+            float chipW = string.IsNullOrEmpty(headerChip) ? 0f : HudStyle.Chip.CalcSize(chip).x + gap * 0.6f;
+
+            float labelW = 0f, valueW = 0f;
+            for (int i = 0; i < rowLabels.Count; i++)
+            {
+                labelW = Mathf.Max(labelW, HudStyle.Dim.CalcSize(new GUIContent(rowLabels[i])).x);
+                valueW = Mathf.Max(valueW, HudStyle.Text.CalcSize(new GUIContent(rowValues[i])).x);
+            }
+            float inner = Mathf.Max(labelW + gap + valueW, titleSize.x + gap + timeSize.x + chipW);
+            float headH = Mathf.Round(u * 1.9f);
+            var panel = new Rect(margin, margin, inner + pad * 2f, pad * 2f + headH + rowLabels.Count * rowH);
+            HudStyle.DrawPanel(panel);
+
+            float x = panel.x + pad, y = panel.y + pad;
+            GUI.Label(new Rect(x, y, titleSize.x, rowH), title, HudStyle.Header);
+            float right = panel.xMax - pad;
+            if (chipW > 0f)
+            {
+                float cw = chipW - gap * 0.6f;
+                GUI.Box(new Rect(right - cw, y - 1f, cw, Mathf.Round(u * 1.35f)), chip, HudStyle.Chip);
+                right -= chipW;
+            }
+            GUI.Label(new Rect(right - timeSize.x, y, timeSize.x, rowH), time, HudStyle.Dim);
+            y += headH - Mathf.Round(u * 0.45f);
+            HudStyle.Fill(new Rect(x, y, inner, 1f), HudStyle.WithAlpha(HudStyle.Accent, 0.35f));
+            y += Mathf.Round(u * 0.45f);
+
+            for (int i = 0; i < rowLabels.Count; i++)
+            {
+                GUI.Label(new Rect(x, y, labelW, rowH), rowLabels[i], HudStyle.Dim);
+                GUI.Label(new Rect(x + labelW + gap, y, valueW, rowH), rowValues[i], HudStyle.Text);
+                y += rowH;
+            }
+        }
+
+        /// <summary>The key list, bottom left: one line per group, like the menu's controls screen.</summary>
+        void DrawHelp(float u, float pad, float margin)
+        {
+            int flags = (app.CanCommand ? 1 : 0) | (app.CanControlTime ? 2 : 0);
+            if (helpLines == null || helpFlags != flags)
+            {
+                helpFlags = flags;
+                helpLines = new List<string>();
+                helpHeads = new List<string>();
+                helpHeads.Add("VIEW");
+                helpLines.Add(Keys("Drag", "orbit", "Wheel", "zoom", "V", "next view", "F", "first view", "C", "satellite camera",
+                                   "Z", "whole Earth", "O", "orbit path", "P", "panel axes"));
+                if (app.CanControlTime)
+                {
+                    helpHeads.Add("TIME");
+                    helpLines.Add(Keys("Space", "pause", "-  =", "slower / faster", "Left  Right", "jump 60 s", "Backspace", "restart"));
+                }
+                if (app.CanCommand)
+                {
+                    helpHeads.Add("SATELLITE");
+                    helpLines.Add(Keys("1  2", "solar panels", "3", "antenna", "4", "antenna jam", "5", "stow", "N", "face Earth",
+                                       "S", "face Sun", "R", "roll to image", "T", "tumble"));
+                }
+                helpHeads.Add("DISPLAY");
+                helpLines.Add(Keys("G", "body axes", "B", "boresight", "L", "view frame", "M", "data source", "H", "status panel", "Esc", "menu"));
+            }
+            float rowH = Mathf.Round(u * 1.35f);
+            float gap = Mathf.Round(u * 1.0f);
+            float headW = 0f, lineW = 0f;
+            for (int i = 0; i < helpLines.Count; i++)
+            {
+                headW = Mathf.Max(headW, HudStyle.Header.CalcSize(new GUIContent(helpHeads[i])).x);
+                lineW = Mathf.Max(lineW, HudStyle.SmallDim.CalcSize(new GUIContent(helpLines[i])).x);
+            }
+            float w = Mathf.Min(headW + gap + lineW + pad * 2f, Screen.width - margin * 2f);
+            float h = pad * 1.6f + helpLines.Count * rowH;
+            var panel = new Rect(margin, Screen.height - margin - h, w, h);
+            HudStyle.DrawPanel(panel);
+            float x = panel.x + pad, y = panel.y + pad * 0.8f;
+            for (int i = 0; i < helpLines.Count; i++)
+            {
+                GUI.Label(new Rect(x, y, headW, rowH), helpHeads[i], HudStyle.Header);
+                GUI.Label(new Rect(x + headW + gap, y, Mathf.Max(0f, panel.xMax - pad - (x + headW + gap)), rowH), helpLines[i], HudStyle.SmallDim);
+                y += rowH;
+            }
+        }
+
+        /// <summary>"key, what it does" pairs as one line: keys bright, descriptions dim.</summary>
+        static string Keys(params string[] pairs)
+        {
+            var b = new StringBuilder(256);
+            for (int i = 0; i + 1 < pairs.Length; i += 2)
+            {
+                if (i > 0) b.Append("     ");
+                b.Append("<b><color=").Append(HudStyle.BrightHex).Append('>').Append(pairs[i]).Append("</color></b>  ").Append(pairs[i + 1]);
+            }
+            return b.ToString();
+        }
+
+        // rows for the on-screen panel are cut out of the same text the headset panel shows
+        void BeginRow(string label, string paddedLabel)
+        {
+            EndRow();
+            rowLabel = label;
+            sb.Append(paddedLabel);
+            rowStart = sb.Length;
+        }
+
+        void EndRow()
+        {
+            if (rowStart < 0) return;
+            rowLabels.Add(rowLabel);
+            rowValues.Add(sb.ToString(rowStart, sb.Length - rowStart).TrimEnd('\n'));
+            rowStart = -1;
         }
 
         // ------------------------------------------------------------------ text
@@ -112,22 +222,28 @@ namespace Eosat1
         {
             DisplayState s = a.State;
             sb.Length = 0;
-            sb.Append("<b>EOSAT-1</b>  ");
-            if (s.Valid) sb.Append(AstroTime.ToIso(s.SimTime).Replace('T', ' ').Replace("Z", " UTC"));
-            else sb.Append("waiting for data");
-            if (a.CanControlTime) sb.Append(a.paused ? "   <color=#ffcc55>PAUSED</color>" : "   x" + a.Speed.ToString("0.##", Inv));
-            else if (s.Valid && s.SimRate > 1.5) sb.Append("   sim x" + s.SimRate.ToString("0", Inv));
+            rowLabels.Clear();
+            rowValues.Clear();
+            rowStart = -1;
+            headerTime = s.Valid ? AstroTime.ToIso(s.SimTime).Replace('T', ' ').Replace("Z", " UTC") : "waiting for data";
+            if (a.CanControlTime) headerChip = a.paused ? "PAUSED" : "x" + a.Speed.ToString("0.##", Inv);
+            else headerChip = s.Valid && s.SimRate > 1.5 ? "sim x" + s.SimRate.ToString("0", Inv) : "";
+            sb.Append("<b>EOSAT-1</b>  ").Append(headerTime);
+            if (headerChip == "PAUSED") sb.Append("   <color=#ffcc55>PAUSED</color>");
+            else if (headerChip.Length > 0) sb.Append("   ").Append(headerChip);
             sb.Append('\n');
+            BeginRow("Source", "Source  ");
             AppendSource(a, s);
             if (!s.Valid)
             {
+                EndRow();
                 text = sb.ToString();
                 return;
             }
 
             // Is it tumbling?
             double rate = s.BodyRateDegS;
-            sb.Append("Tumbling?        ");
+            BeginRow("Tumbling?", "Tumbling?        ");
             if (double.IsNaN(rate)) sb.Append("? (rate unknown at this data speed)");
             else if (rate > 0.5) sb.Append(Bad("YES")).Append("  ").Append(rate.ToString("0.0", Inv)).Append(" deg/s");
             else sb.Append(Good("no")).Append("  ").Append(rate.ToString("0.00", Inv)).Append(" deg/s");
@@ -136,7 +252,7 @@ namespace Eosat1
             // Is the camera facing Earth?
             Vec3d camEci = s.QBodyToEci.Rotate(Vec3d.UnitZ);
             double offNadir = Vec3d.Angle(camEci, -s.PosEciKm) * MathUtil.Rad2Deg;
-            sb.Append("Camera on Earth? ");
+            BeginRow("Camera on Earth?", "Camera on Earth? ");
             if (offNadir < 3.0) sb.Append(Good("YES"));
             else if (offNadir < 68.0) sb.Append(Warn("off-pointed"));
             else sb.Append(Bad("NO"));
@@ -145,7 +261,7 @@ namespace Eosat1
             // Are the wings in the sun?
             Vec3d sun = s.HasSun ? s.SunDirEci : Vec3d.Zero;
             bool eclipse = a.space != null ? a.space.Illumination < 0.5 : s.InEclipse;
-            sb.Append("Wings in sun?    ");
+            BeginRow("Panels in sun?", "Panels in sun?   ");
             if (eclipse) sb.Append(Warn("ECLIPSE")).Append(" (Earth's shadow)  ");
             AppendWing("-Y", s.WingMinusY, -1, s, sun, eclipse);
             sb.Append("  ");
@@ -153,7 +269,7 @@ namespace Eosat1
             sb.Append('\n');
 
             // Did the antenna come out?
-            sb.Append("Antenna out?     ");
+            BeginRow("Antenna out?", "Antenna out?     ");
             if (!s.Antenna.Present) sb.Append("?");
             else if (s.Antenna.State == DeployState.Jammed) sb.Append(Bad("JAMMED"));
             else if (s.Antenna.State == DeployState.Deployed) sb.Append(Good("DEPLOYED"));
@@ -166,11 +282,17 @@ namespace Eosat1
             double lat = Math.Asin(MathUtil.Clamp(e.z / e.Length, -1, 1)) * MathUtil.Rad2Deg;
             double lon = Math.Atan2(e.y, e.x) * MathUtil.Rad2Deg;
             double alt = s.PosEciKm.Length - Ephemeris.EarthRadiusKm;
-            sb.Append("Over             ").Append(Math.Abs(lat).ToString("0.0", Inv)).Append(lat >= 0 ? " N  " : " S  ")
+            BeginRow("Over", "Over             ");
+            sb.Append(Math.Abs(lat).ToString("0.0", Inv)).Append(lat >= 0 ? " N  " : " S  ")
               .Append(Math.Abs(lon).ToString("0.0", Inv)).Append(lon >= 0 ? " E" : " W")
               .Append("   alt ").Append(alt.ToString("0", Inv)).Append(" km");
             if (a.ActiveFeed == FeedKind.Sandbox && a.Sandbox != null)
-                sb.Append('\n').Append("Mode             ").Append(a.Sandbox.ModeName(a.SandboxTime));
+            {
+                sb.Append('\n');
+                BeginRow("Mode", "Mode             ");
+                sb.Append(a.Sandbox.ModeName(a.SandboxTime));
+            }
+            EndRow();
             text = sb.ToString();
         }
 
@@ -179,10 +301,10 @@ namespace Eosat1
             switch (a.ActiveFeed)
             {
                 case FeedKind.Sandbox:
-                    sb.Append("Source  SANDBOX (built-in simulator, takes commands)\n");
+                    sb.Append("SANDBOX (built-in simulator, takes commands)\n");
                     break;
                 case FeedKind.Replay:
-                    sb.Append("Source  REPLAY");
+                    sb.Append("REPLAY");
                     if (a.Replay != null)
                         sb.Append("  frame ").Append(a.Replay.Cursor).Append('/').Append(a.Replay.Count);
                     AppendTimelineStats(a.Timeline);
@@ -190,7 +312,7 @@ namespace Eosat1
                     break;
                 case FeedKind.Tcp:
                     TcpFeedClient l = a.Link;
-                    sb.Append("Source  LIVE ").Append(a.tcpHost).Append(':').Append(a.tcpPort).Append("  ");
+                    sb.Append("LIVE ").Append(a.tcpHost).Append(':').Append(a.tcpPort).Append("  ");
                     if (l == null) sb.Append(Bad("stopped"));
                     else if (!l.Connected) sb.Append(Bad("not connected"));
                     else if (s.Valid && s.DataAge > 2.0) sb.Append(Warn("STALE " + s.DataAge.ToString("0", Inv) + " s"));
@@ -247,8 +369,8 @@ namespace Eosat1
             return new Vec3d(Math.Cos(a), Math.Sin(a), 0);
         }
 
-        static string Good(string s) { return "<color=#7CFC9A>" + s + "</color>"; }
-        static string Warn(string s) { return "<color=#FFD166>" + s + "</color>"; }
-        static string Bad(string s) { return "<color=#FF6B6B>" + s + "</color>"; }
+        static string Good(string s) { return "<b><color=#7CFC9A>" + s + "</color></b>"; }
+        static string Warn(string s) { return "<b><color=#FFD166>" + s + "</color></b>"; }
+        static string Bad(string s) { return "<b><color=#FF6B6B>" + s + "</color></b>"; }
     }
 }
