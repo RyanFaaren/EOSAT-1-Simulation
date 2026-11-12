@@ -82,8 +82,9 @@ In the Editor's Scene view the room only appears while playing.
 | `C` | satellite camera view: off → corner picture → full screen (wheel or `[` `]` zooms it) |
 | `Z` | zoom out to the whole Earth / back to the spacecraft |
 | `O` | orbit path on / off |
+| `P` | solar panel axes on / off |
 
-The last three also have buttons at the top right of the screen.
+The last four also have buttons at the top right of the screen (the **Views** panel).
 
 Commands (`1`–`5`, `N S R T`) act on the built-in simulator only. With the real simulator,
 commands come from mission control, as they should.
@@ -119,8 +120,17 @@ its centre at 1.45 m, so you look slightly down at the cameras' side and up at t
   spacecraft is drawn bigger (it would be a speck) and marked with a yellow dot. In the
   headset the globe floats where the spacecraft was, and you can walk around it.
 - **Orbit path (`O`, on by default).** One full orbit, worked out from the spacecraft's
-  position and velocity at that moment, so the line always passes through it. Bright = still
-  ahead, dim = already flown, violet = inside Earth's shadow (where the eclipse happens).
+  position and velocity at that moment, so the line always passes through it. It is a glowing
+  cyan line: bright ahead, a fading trail behind, violet inside Earth's shadow, with an amber
+  dot where the eclipse starts and another where it ends.
+- **Solar panel axes (`P`, on by default).** An orange arrow out of each solar panel, along
+  the direction its cells face. Folded, the two panels face different ways; once both are
+  out the arrows are parallel. The status panel's "Panels in sun?" row gives the matching
+  numbers.
+
+The on-screen display (status panel, key list, messages and the Views buttons) uses the
+main menu's style: navy panels with a cyan border, cyan headings, amber for warnings. It is
+drawn by `HudStyle`.
 
 The satellite camera and the whole-Earth view cannot be on together; choosing one closes the
 other. These views are built when the scene starts, so there is nothing to rebuild.
@@ -281,7 +291,8 @@ EOSAT1/
                     MenuKit (quads, text, buttons), MenuSettings (remembered choices)
   Scripts/Unity/    EosatApp (conductor), SpaceScene (Earth/Sun/Moon/stars placement),
                     SatelliteView + DeployableJoint, InfoPanel, DesktopControls, VrRig,
-                    ViewDirector (satellite camera, whole Earth, buttons), OrbitPathView,
+                    ViewDirector (satellite camera, whole Earth, panel axes, buttons), OrbitPathView,
+                    HudStyle (the on-screen display's look),
                     InputShim, SimToUnity, ProceduralMeshes, FaceCamera
   Editor/           EosatSceneBuilder (the EOSAT-1 menu; builds the spacecraft from the parts list)
                     EosatMenuTools (menu scene helpers; Play starts at the main menu)
