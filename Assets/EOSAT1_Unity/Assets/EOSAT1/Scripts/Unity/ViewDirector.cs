@@ -10,9 +10,9 @@
 //                         and the Moon at its true distance. Everything is to scale except
 //                         the spacecraft itself, which is drawn bigger so it can be seen.
 //   Orbit path (O)        the line the spacecraft follows (see OrbitPathView).
-//   Panel axes (P)        an arrow from each solar panel along the direction its cells face,
-//                         so you can see where the panels point (at the Sun or not) as the
-//                         spacecraft turns and as the panels fold out.
+//   Panel axis (P)        one long line out of the back of the spacecraft, along the direction
+//                         the deployed solar array faces (body -X): the solar panels' version
+//                         of the camera boresight line. Aim it at the Sun for full power.
 //
 // Desktop also gets a button for each at the top right, styled like the main menu. Headset: right grip = whole Earth,
 // right stick click = camera screen, left stick click = orbit path.
@@ -52,10 +52,12 @@ namespace Eosat1
         [Header("Orbit path")]
         public bool pathVisible = true;
 
-        [Header("Solar panel axes")]
+        [Header("Solar panel axis")]
         public bool panelAxesVisible = true;
-        [Tooltip("Length of each arrow in metres (the spacecraft is 1.4 m across).")]
-        public float panelAxisLength = 1.1f;
+        [Tooltip("Length of the line in metres. The camera boresight line is 3 m.")]
+        public float panelAxisLength = 3f;
+        [Tooltip("Where the line starts, in metres from the spacecraft's centre along the panel direction (the rear ridge is at 0.565).")]
+        public float panelAxisStart = 0.58f;
         public Color panelAxisColor = new Color(1f, 0.6f, 0.12f);
 
         public bool Overview { get { return space != null && space.overview; } }
@@ -131,17 +133,19 @@ namespace Eosat1
             arrowMaterial = new Material(sh) { name = "EOSAT1 Panel Axis (runtime)" };
             if (arrowMaterial.HasProperty("_Color")) arrowMaterial.SetColor("_Color", panelAxisColor);
             if (arrowMaterial.HasProperty("_BaseColor")) arrowMaterial.SetColor("_BaseColor", panelAxisColor);
-            arrowMesh = ArrowMesh(Mathf.Max(0.2f, panelAxisLength), 0.006f, 0.026f, 0.11f, 16);
-            AddPanelAxis(satelliteView.cellsMinusY, "PANEL -Y");
-            AddPanelAxis(satelliteView.cellsPlusY, "PANEL +Y");
-        }
+            // a thin line like the camera boresight's (8 mm), with a small head so its direction is clear
+            arrowMesh = ArrowMesh(Mathf.Max(0.2f, panelAxisLength), 0.004f, 0.018f, 0.09f, 16);
 
-        /// <summary>An arrow out of the cell side of one solar panel (the panel's local +Z).</summary>
-        void AddPanelAxis(Transform panel, string label)
-        {
-            if (panel == null) return;
-            var go = new GameObject("Panel Pointing Axis");
-            go.transform.SetParent(panel, false);
+            // body axes (x, y, z) -> Unity local (x, z, y), the same swap as SimToUnity
+            Vector3 nb = satelliteView.deployedCellNormalBody;
+            Vector3 dir = new Vector3(nb.x, nb.z, nb.y);
+            if (dir.sqrMagnitude < 1e-6f) dir = Vector3.left;
+            dir.Normalize();
+
+            var go = new GameObject("Solar Panel Axis");
+            go.transform.SetParent(satelliteView.transform, false);
+            go.transform.localPosition = dir * panelAxisStart;
+            go.transform.localRotation = Quaternion.LookRotation(dir, Mathf.Abs(dir.y) > 0.99f ? Vector3.forward : Vector3.up);
             go.AddComponent<MeshFilter>().sharedMesh = arrowMesh;
             var mr = go.AddComponent<MeshRenderer>();
             mr.sharedMaterial = arrowMaterial;
@@ -163,7 +167,7 @@ namespace Eosat1
                 tm.anchor = TextAnchor.MiddleCenter;
                 tm.alignment = TextAlignment.Center;
                 tm.color = Color.Lerp(panelAxisColor, Color.white, 0.35f);
-                tm.text = label;
+                tm.text = "SOLAR PANELS";
                 var lr = lg.GetComponent<MeshRenderer>();
                 lr.sharedMaterial = likeRenderer.sharedMaterial;
                 lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -355,7 +359,7 @@ namespace Eosat1
             if (!ready) return;
             panelAxesVisible = !panelAxesVisible;
             ApplyState();
-            app.Say(panelAxesVisible ? "Panel axes shown: each arrow points the way that panel's solar cells face" : "Panel axes hidden");
+            app.Say(panelAxesVisible ? "Panel axis shown: the orange line points the way the deployed solar panels face" : "Panel axis hidden");
         }
 
         public void ZoomSatCamera(float notches)
@@ -564,7 +568,7 @@ namespace Eosat1
             DrawButton(buttonRects[0], camText, "C", display != SatCameraDisplay.Off, mouse);
             DrawButton(buttonRects[1], overview ? "Back to the satellite" : "Whole Earth", "Z", overview, mouse);
             DrawButton(buttonRects[2], "Orbit path", "O", pathVisible, mouse);
-            DrawButton(buttonRects[3], "Panel axes", "P", panelAxesVisible, mouse);
+            DrawButton(buttonRects[3], "Panel axis", "P", panelAxesVisible, mouse);
         }
     }
 }

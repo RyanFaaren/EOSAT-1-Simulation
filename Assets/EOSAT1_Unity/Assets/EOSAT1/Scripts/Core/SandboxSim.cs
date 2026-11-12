@@ -1,7 +1,8 @@
 // EOSAT-1 VR - a small, interactive stand-in for the simulator, used when no live link
 // is running (open days, demos, development). It flies the same one-orbit script as the
 // sample file (course slide 23) and accepts commands: deploy each wing, deploy the
-// antenna, inject an antenna jam, point at Earth / the Sun / roll to image, tumble.
+// antenna, inject an antenna jam or a solar panel jam, stow the panels or the antenna,
+// point at Earth / the Sun / roll to image, tumble.
 //
 // Everything is a pure function of time plus a list of timestamped events, so time can
 // run at any speed and jump backwards (like reloading a saved point). Commands issued
@@ -19,6 +20,10 @@ namespace Eosat1.Core
         DeployAntenna,
         ToggleAntennaJam,
         ResetDeployables,
+        // added later; kept after the original ones so their numbers do not change
+        ToggleWingJam,
+        StowWings,
+        StowAntenna,
         AttitudeNadir,
         AttitudeSun,
         AttitudeRollImaging,
@@ -28,6 +33,8 @@ namespace Eosat1.Core
     public sealed class SandboxSim
     {
         public const double WingDeploySeconds = 30.0;
+        /// <summary>With a panel jam, a panel folding out sticks here (0 = folded, 1 = fully out).</summary>
+        public const double WingJamFraction = 0.4;
         public const double RollDegrees = 25.0;
         public const double AltitudeKm = 500.0;
         public const double InclinationDeg = 98.0;
@@ -274,41 +281,77 @@ namespace Eosat1.Core
         }
 
         // ------------------------------------------------------------------ deployables
+        /// <summary>One solar panel while the event list is replayed.</summary>
+        struct WingRun
+        {
+            public bool Commanded;   // told to fold out
+            public double F;         // how far out it is, 0..1
+
+            /// <summary>Move on by dt seconds. A jammed panel stops at the jam point (or where it already is, if further).</summary>
+            public void Advance(double dt, bool jam)
+            {
+                if (!Commanded || F >= 1.0 || dt <= 0) return;
+                double limit = jam ? Math.Max(F, WingJamFraction) : 1.0;
+                F = Math.Min(limit, F + dt / WingDeploySeconds);
+            }
+
+            public DeployInfo Info(bool jam)
+            {
+                // a panel that is fully out is past the jam; any other panel is stuck where it is
+                if (jam && F < 1.0) return DeployInfo.Of(DeployState.Jammed, F);
+                if (!Commanded) return DeployInfo.Of(DeployState.Stowed, 0);
+                if (F < 1.0) return DeployInfo.Of(DeployState.Deploying, F);
+                return DeployInfo.Of(DeployState.Deployed, 1.0);
+            }
+        }
+
         void DeployStates(double t, out DeployInfo wingMy, out DeployInfo wingPy, out DeployInfo antenna)
         {
-            double myT = double.NaN, pyT = double.NaN;
-            bool antennaOut = false, jam = false;
+            // Replay every command up to time t, moving the panels on between commands, so the
+            // answer depends only on t and the list (time can run at any speed, or jump back).
+            var my = new WingRun();
+            var py = new WingRun();
+            bool antennaOut = false, jam = false, wingJam = false;
+            double last = 0.0;
             List<Event> sorted = SortedEvents();
             for (int k = 0; k < sorted.Count; k++)
             {
                 Event e = sorted[k];
                 if (e.T > t) break;
+                my.Advance(e.T - last, wingJam);
+                py.Advance(e.T - last, wingJam);
+                last = Math.Max(last, e.T);
                 switch (e.Cmd)
                 {
-                    case SandboxCommand.DeployWingMinusY: if (double.IsNaN(myT)) myT = e.T; break;
-                    case SandboxCommand.DeployWingPlusY: if (double.IsNaN(pyT)) pyT = e.T; break;
+                    case SandboxCommand.DeployWingMinusY: my.Commanded = true; break;
+                    case SandboxCommand.DeployWingPlusY: py.Commanded = true; break;
                     case SandboxCommand.DeployAntenna: antennaOut = true; break;
                     case SandboxCommand.ToggleAntennaJam: jam = !jam; break;
+                    case SandboxCommand.ToggleWingJam: wingJam = !wingJam; break;
+                    case SandboxCommand.StowWings:
+                        my = new WingRun();
+                        py = new WingRun();
+                        wingJam = false;
+                        break;
+                    case SandboxCommand.StowAntenna:
+                        antennaOut = false;
+                        jam = false;
+                        break;
                     case SandboxCommand.ResetDeployables:
-                        myT = double.NaN;
-                        pyT = double.NaN;
+                        my = new WingRun();
+                        py = new WingRun();
+                        wingJam = false;
                         antennaOut = false;
                         jam = false;
                         break;
                 }
             }
-            wingMy = Wing(myT, t);
-            wingPy = Wing(pyT, t);
+            my.Advance(t - last, wingJam);
+            py.Advance(t - last, wingJam);
+            wingMy = my.Info(wingJam);
+            wingPy = py.Info(wingJam);
             antenna = DeployInfo.Of(jam ? DeployState.Jammed : (antennaOut ? DeployState.Deployed : DeployState.Stowed),
                                     jam ? 0.35 : (antennaOut ? 1.0 : 0.0));
-        }
-
-        static DeployInfo Wing(double startT, double t)
-        {
-            if (double.IsNaN(startT)) return DeployInfo.Of(DeployState.Stowed, 0);
-            double f = (t - startT) / WingDeploySeconds;
-            if (f < 1.0) return DeployInfo.Of(DeployState.Deploying, Math.Max(0.0, f));
-            return DeployInfo.Of(DeployState.Deployed, 1.0);
         }
 
         // ------------------------------------------------------------------ the frame

@@ -2,6 +2,8 @@
 // Wing states STOWED -> DEPLOYING (fraction 0..1 over ~30 s) -> DEPLOYED.
 // Antenna STOWED / DEPLOYED / JAMMED. A jam is made obvious: one element stuck
 // part-way and shaking, a pulsing red halo, and a floating label.
+// A solar panel can be JAMMED too: it stops where the data says, shakes on its hinge,
+// and gets its own "SOLAR PANEL JAMMED" label.
 using Eosat1.Core;
 using UnityEngine;
 
@@ -38,6 +40,7 @@ namespace Eosat1
         public float catchUpTime = 0.25f;
 
         float shownMy, shownPy, shownAntenna, shownJam;
+        GameObject wingJamLabelMy, wingJamLabelPy;
         int lastDiscontinuity = int.MinValue;
         MaterialPropertyBlock mpb;
         static readonly int ColorId = Shader.PropertyToID("_Color");
@@ -91,8 +94,13 @@ namespace Eosat1
             shownAntenna = Mathf.Lerp(shownAntenna, antennaTarget, k);
             shownJam = Mathf.Lerp(shownJam, jammed ? jammedFraction : antennaTarget, k);
 
-            Drive(wingMinusY, shownMy, 0f);
-            Drive(wingPlusY, shownPy, 0f);
+            bool jamMy = s.WingMinusY.Present && s.WingMinusY.State == DeployState.Jammed;
+            bool jamPy = s.WingPlusY.Present && s.WingPlusY.State == DeployState.Jammed;
+            float wingShake = Mathf.Sin(Time.time * 31f) * 0.9f + Mathf.Sin(Time.time * 13f) * 0.6f;   // degrees
+            Drive(wingMinusY, shownMy, jamMy && shownMy > 0.03f ? wingShake : 0f);   // a folded panel has no room to shake
+            Drive(wingPlusY, shownPy, jamPy && shownPy > 0.03f ? -wingShake : 0f);
+            ShowWingJamLabel(ref wingJamLabelMy, cellsMinusY, jamMy);
+            ShowWingJamLabel(ref wingJamLabelPy, cellsPlusY, jamPy);
             Drive(antennaElements, shownAntenna, 0f);
             if (antennaJamElement != null)
             {
@@ -112,6 +120,23 @@ namespace Eosat1
                     jamHalo.SetPropertyBlock(mpb);
                 }
             }
+        }
+
+        /// <summary>A red "SOLAR PANEL JAMMED" label in front of a jammed panel, made from the antenna's label the first time it is needed.</summary>
+        void ShowWingJamLabel(ref GameObject label, Transform panel, bool jammed)
+        {
+            if (label == null)
+            {
+                if (!jammed || jamLabel == null || panel == null) return;
+                label = Instantiate(jamLabel, panel);
+                label.name = "Panel Jam Label";
+                label.transform.localPosition = new Vector3(0f, 0f, 0.3f);   // in front of the cells
+                label.transform.localRotation = Quaternion.identity;
+                label.layer = jamLabel.layer;
+                TextMesh tm = label.GetComponent<TextMesh>();
+                if (tm != null) tm.text = "SOLAR PANEL JAMMED";
+            }
+            if (label.activeSelf != jammed) label.SetActive(jammed);
         }
 
         static void Drive(DeployableJoint[] joints, float f, float wobble)
