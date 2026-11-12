@@ -134,7 +134,9 @@ namespace Eosat1
             if (InputShim.Down(KeyCode.Alpha2)) app.Command(SandboxCommand.DeployWingPlusY);
             if (InputShim.Down(KeyCode.Alpha3)) app.Command(SandboxCommand.DeployAntenna);
             if (InputShim.Down(KeyCode.Alpha4)) app.Command(SandboxCommand.ToggleAntennaJam);
-            if (InputShim.Down(KeyCode.Alpha5)) app.Command(SandboxCommand.ResetDeployables);
+            if (InputShim.Down(KeyCode.Alpha5)) app.Command(SandboxCommand.ToggleWingJam);
+            if (InputShim.Down(KeyCode.Alpha6)) app.Command(SandboxCommand.StowWings);
+            if (InputShim.Down(KeyCode.Alpha7)) app.Command(SandboxCommand.StowAntenna);
             if (InputShim.Down(KeyCode.N)) app.Command(SandboxCommand.AttitudeNadir);
             if (InputShim.Down(KeyCode.S)) app.Command(SandboxCommand.AttitudeSun);
             if (InputShim.Down(KeyCode.R)) app.Command(SandboxCommand.AttitudeRollImaging);

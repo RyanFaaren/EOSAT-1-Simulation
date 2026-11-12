@@ -73,7 +73,9 @@ In the Editor's Scene view the room only appears while playing.
 | `←` `→` | jump back / forward 60 s (back = like reloading a saved point) |
 | `Backspace` | restart the scenario |
 | `1` `2` | deploy solar panel −Y / +Y |
-| `3` `4` `5` | deploy antenna / inject or clear an antenna jam / stow everything |
+| `3` `4` | deploy antenna / inject or clear an antenna jam |
+| `5` | inject or clear a solar panel jam (a panel folding out sticks at 40%; panels already out are not affected) |
+| `6` `7` | stow the solar panels / stow the antenna (stowing also clears that part's jam) |
 | `N` `S` `R` `T` | point at Earth / point the panels at the Sun / roll 25° to image / tumble |
 | `G` `B` | body axes / camera boresight and its footprint on Earth |
 | `L` | view frame: Earth below (default) or inertial (ECI axes, up = celestial north) |
@@ -82,7 +84,7 @@ In the Editor's Scene view the room only appears while playing.
 | `C` | satellite camera view: off → corner picture → full screen (wheel or `[` `]` zooms it) |
 | `Z` | zoom out to the whole Earth / back to the spacecraft |
 | `O` | orbit path on / off |
-| `P` | solar panel axes on / off |
+| `P` | solar panel axis on / off |
 
 The last four also have buttons at the top right of the screen (the **Views** panel).
 
@@ -95,7 +97,7 @@ commands come from mission control, as they should.
 |---|---|
 | Left stick | move where you look |
 | Right stick | left/right snap turn, up/down rise/sink |
-| `A` / `B` | deploy the next panel / deploy the antenna (or clear a jam) |
+| `A` / `B` | deploy the next panel (or clear a panel jam) / deploy the antenna (or clear its jam) |
 | `X` / `Y` | info panel on the left controller / time 1× → 10× → 60× |
 | Left grip / Menu | pause / restart |
 | Right / left trigger | body axes / camera boresight |
@@ -113,7 +115,7 @@ its centre at 1.45 m, so you look slightly down at the cameras' side and up at t
   45° wide so you can tell where you are; zoom in as far as the real field of view, about
   5.1° (the two imagers together cover a 44 km wide strip from 500 km). A box in the middle
   marks that real view while you are zoomed out. At the real zoom the picture is soft: the
-  4096-pixel Earth map has about 10 km per pixel, and the real view is 44 km wide.
+  8192-pixel Earth map has about 5 km per pixel, and the real view is 44 km wide.
 - **Whole Earth (`Z`).** The Earth becomes a 1 m globe, north up, with the spacecraft going
   round it and the Moon at its true distance (30 m away on this scale; zoom out with the
   wheel). The orbit height, the Earth, the Moon and the day/night line are to scale. Only the
@@ -123,10 +125,10 @@ its centre at 1.45 m, so you look slightly down at the cameras' side and up at t
   position and velocity at that moment, so the line always passes through it. It is a glowing
   cyan line: bright ahead, a fading trail behind, violet inside Earth's shadow, with an amber
   dot where the eclipse starts and another where it ends.
-- **Solar panel axes (`P`, on by default).** An orange arrow out of each solar panel, along
-  the direction its cells face. Folded, the two panels face different ways; once both are
-  out the arrows are parallel. The status panel's "Panels in sun?" row gives the matching
-  numbers.
+- **Solar panel axis (`P`, on by default).** One long orange line out of the back of the
+  spacecraft, along the direction the deployed solar array faces (body −X). It is the solar
+  panels' version of the camera boresight line: point it at the Sun for full power. The
+  status panel's "Panels in sun?" row gives the matching numbers.
 
 The on-screen display (status panel, key list, messages and the Views buttons) uses the
 main menu's style: navy panels with a cyan border, cyan headings, amber for warnings. It is
@@ -205,7 +207,7 @@ is sped up. Once a second the headset sends back a status line with the status w
 | 9 | interpolating between frames |
 | 10 | showing jumps (sim time sped up) |
 | 11 | eclipse shown |
-| 12 | antenna jam shown |
+| 12 | antenna or solar panel jam shown |
 | 13 | info panel shown |
 
 ### Testing the link without the course stub
@@ -310,7 +312,7 @@ Tools/
   make_one_orbit.py             regenerates the one-orbit recording and runs physics checks
   mock_vr_stub.py               TCP stand-in for vr_stub.py, with --chaos
   make_textures.py              Earth, night lights, Moon, stars; geo_data.py holds the geography
-  make_earth_from_blue_marble.py  the 4K Earth day and night maps from NASA imagery
+  make_earth_maps.py            the 8K Earth day and night maps from satellite imagery
 ```
 
 ## Credits and limits
@@ -318,11 +320,12 @@ Tools/
 - EOS SAT-1 figures: EOS Data Analytics, eoPortal, Wikipedia, satcatalog. Geometry fitted
   to the project's reference picture and exploded view. Internal parts are not modelled
   yet.
-- Earth maps are NASA imagery at 4096 × 2048: Blue Marble for the day side (land, sea
-  floor and ice, no clouds) and the city lights from Earth at Night for the night side,
-  taken from the copies in github.com/vasturiano/three-globe. `Tools/make_earth_from_blue_marble.py`
-  builds them (it adds the water mask used for sun glint). `make_textures.py` still writes
-  the older drawn maps, so run the Blue Marble script after it if you regenerate everything.
+- Earth maps are 8192 × 4096: the day side (land, sea and ice, no clouds), a water mask for
+  the sun glint, and the city lights for the night side. They are Solar System Scope's Earth
+  textures (solarsystemscope.com/textures, CC BY 4.0, based on NASA imagery), put together by
+  `Tools/make_earth_maps.py`. `make_textures.py` still writes the older drawn maps, so run
+  `make_earth_maps.py` after it if you regenerate everything. On a standalone Quest, lower
+  the two textures' Max Size to 4096 if memory is tight.
 - Named stars (to about magnitude 3) are at their real J2000 positions; fainter stars are
   random filler, denser along the Milky Way.
 - Sun and Moon: Astronomical Almanac / Vallado low-precision formulas (Sun ~0.01°,

@@ -301,15 +301,56 @@ namespace Eosat1
                 return;
             }
             sandbox.Command(cmd, sandboxT);
-            Say("Command: " + cmd);
+            Say(Describe(cmd));
         }
 
+        /// <summary>What a command does, for the message on screen.</summary>
+        string Describe(SandboxCommand cmd)
+        {
+            switch (cmd)
+            {
+                case SandboxCommand.DeployWingMinusY: return "Solar panel -Y: deploy";
+                case SandboxCommand.DeployWingPlusY: return "Solar panel +Y: deploy";
+                case SandboxCommand.DeployAntenna: return "Antenna: deploy";
+                case SandboxCommand.ToggleAntennaJam:
+                    return state.Valid && state.Antenna.State == DeployState.Jammed ? "Antenna jam cleared" : "Antenna jam injected";
+                case SandboxCommand.ToggleWingJam:
+                    return WingJammed ? "Solar panel jam cleared"
+                                      : "Solar panel jam injected: a panel folding out sticks at 40% (panels already out are not affected)";
+                case SandboxCommand.StowWings: return "Solar panels stowed";
+                case SandboxCommand.StowAntenna: return "Antenna stowed";
+                case SandboxCommand.ResetDeployables: return "Solar panels and antenna stowed";
+                case SandboxCommand.AttitudeNadir: return "Pointing: camera at Earth";
+                case SandboxCommand.AttitudeSun: return "Pointing: solar panels at the Sun";
+                case SandboxCommand.AttitudeRollImaging: return "Pointing: 25 deg roll to image";
+                case SandboxCommand.AttitudeTumble: return "Pointing: tumble";
+                default: return "Command: " + cmd;
+            }
+        }
+
+        /// <summary>Is either solar panel reported jammed?</summary>
+        public bool WingJammed
+        {
+            get
+            {
+                return state.Valid && ((state.WingMinusY.Present && state.WingMinusY.State == DeployState.Jammed) ||
+                                       (state.WingPlusY.Present && state.WingPlusY.State == DeployState.Jammed));
+            }
+        }
+
+        static bool NotStarted(DeployInfo w)
+        {
+            return !w.Present || w.State == DeployState.Stowed || (w.State == DeployState.Jammed && w.EffectiveFraction <= 0.0);
+        }
+
+        /// <summary>Headset button A: deploy the next panel; if one has jammed part-way, clear the jam instead.</summary>
         public void DeployNextWing()
         {
             if (!state.Valid) return;
-            if (state.WingMinusY.State == DeployState.Stowed || !state.WingMinusY.Present) Command(SandboxCommand.DeployWingMinusY);
-            else if (state.WingPlusY.State == DeployState.Stowed || !state.WingPlusY.Present) Command(SandboxCommand.DeployWingPlusY);
-            else Say("Both wings are already out");
+            if (NotStarted(state.WingMinusY)) Command(SandboxCommand.DeployWingMinusY);
+            else if (NotStarted(state.WingPlusY)) Command(SandboxCommand.DeployWingPlusY);
+            else if (WingJammed) Command(SandboxCommand.ToggleWingJam);
+            else Say("Both solar panels are already out");
         }
 
         public void DeployAntennaOrClearJam()
@@ -410,7 +451,7 @@ namespace Eosat1
             if (state.Valid && state.Interpolating) bits |= BitInterpolating;
             FrameTimelineNewestJump(ref bits);
             if (space != null && space.Illumination < 0.5) bits |= BitEclipseShown;
-            if (state.Valid && state.Antenna.State == DeployState.Jammed) bits |= BitJamShown;
+            if (state.Valid && (state.Antenna.State == DeployState.Jammed || WingJammed)) bits |= BitJamShown;
             if (infoPanel != null && infoPanel.Visible) bits |= BitPanelShown;
             return bits;
         }

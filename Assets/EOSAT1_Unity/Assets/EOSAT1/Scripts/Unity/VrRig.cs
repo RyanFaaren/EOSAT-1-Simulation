@@ -3,7 +3,7 @@
 // Walk around the spacecraft for real (it is life size), or use the sticks.
 //
 // Left stick   move (where you look)      Right stick  left/right snap turn, up/down rise/sink
-// A            deploy the next wing       B            deploy antenna / clear a jam
+// A            next wing / clear its jam  B            deploy antenna / clear a jam
 // X            info panel on/off          Y            time 1x -> 10x -> 60x
 // Left grip    pause                      Menu         restart the scenario
 // Right trigger body axes                 Left trigger camera boresight

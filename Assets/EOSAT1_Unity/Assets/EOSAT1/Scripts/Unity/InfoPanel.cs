@@ -152,7 +152,7 @@ namespace Eosat1
                 helpHeads = new List<string>();
                 helpHeads.Add("VIEW");
                 helpLines.Add(Keys("Drag", "orbit", "Wheel", "zoom", "V", "next view", "F", "first view", "C", "satellite camera",
-                                   "Z", "whole Earth", "O", "orbit path", "P", "panel axes"));
+                                   "Z", "whole Earth", "O", "orbit path", "P", "panel axis"));
                 if (app.CanControlTime)
                 {
                     helpHeads.Add("TIME");
@@ -161,7 +161,8 @@ namespace Eosat1
                 if (app.CanCommand)
                 {
                     helpHeads.Add("SATELLITE");
-                    helpLines.Add(Keys("1  2", "solar panels", "3", "antenna", "4", "antenna jam", "5", "stow", "N", "face Earth",
+                    helpLines.Add(Keys("1  2", "solar panels", "3", "antenna", "4", "antenna jam", "5", "panel jam",
+                                       "6", "stow panels", "7", "stow antenna", "N", "face Earth",
                                        "S", "face Sun", "R", "roll to image", "T", "tumble"));
                 }
                 helpHeads.Add("DISPLAY");
@@ -346,6 +347,8 @@ namespace Eosat1
             }
             if (w.State == DeployState.Stowed) sb.Append("stowed");
             else if (w.State == DeployState.Deployed) sb.Append("out");
+            else if (w.State == DeployState.Jammed)
+                sb.Append(Bad("JAMMED")).Append(" at ").Append(Math.Round(w.EffectiveFraction * 100).ToString(Inv)).Append('%');
             else sb.Append(w.Label.ToLowerInvariant());
             if (eclipse || !s.HasSun) return;
             Vec3d cellNormal;

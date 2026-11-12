@@ -189,8 +189,8 @@ namespace Eosat1.EditorTools
 
         static void ConfigureTextures()
         {
-            Import("earth_day.png", 4096, TextureWrapMode.Repeat, TextureWrapMode.Clamp, true, false);
-            Import("earth_night.png", 4096, TextureWrapMode.Repeat, TextureWrapMode.Clamp, true, false);
+            Import("earth_day.png", 8192, TextureWrapMode.Repeat, TextureWrapMode.Clamp, true, false);
+            Import("earth_night.png", 8192, TextureWrapMode.Repeat, TextureWrapMode.Clamp, true, false);
             Import("moon.png", 1024, TextureWrapMode.Repeat, TextureWrapMode.Clamp, true, false);
             // EOS SAT-1: whole-panel pictures, their metal/smoothness masks (linear), and the gold foil
             Import("panel_a.png", 2048, TextureWrapMode.Clamp, TextureWrapMode.Clamp, true, false);
