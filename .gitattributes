@@ -169,3 +169,8 @@ Packages/packages-lock.json linguist-generated
 
 # Exceptions for .asset files such as lightning pre-baking
 LightingData.asset     binary
+
+# This repo stores its pictures as normal files, not in Git LFS.
+# Without this, pictures uploaded on the GitHub website become LFS pointer
+# notes, and Git Desktop shows them as changed when they aren't.
+*.png                   -filter -diff -merge -text
