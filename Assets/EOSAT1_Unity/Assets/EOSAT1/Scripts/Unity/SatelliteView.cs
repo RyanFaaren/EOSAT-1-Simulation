@@ -40,6 +40,8 @@ namespace Eosat1
         public float catchUpTime = 0.25f;
 
         float shownMy, shownPy, shownAntenna, shownJam;
+        float shownSada;
+        bool haveSada;
         GameObject wingJamLabelMy, wingJamLabelPy;
         int lastDiscontinuity = int.MinValue;
         MaterialPropertyBlock mpb;
@@ -99,6 +101,7 @@ namespace Eosat1
             float wingShake = Mathf.Sin(Time.time * 31f) * 0.9f + Mathf.Sin(Time.time * 13f) * 0.6f;   // degrees
             Drive(wingMinusY, shownMy, jamMy && shownMy > 0.03f ? wingShake : 0f);   // a folded panel has no room to shake
             Drive(wingPlusY, shownPy, jamPy && shownPy > 0.03f ? -wingShake : 0f);
+            TurnWingsBySada(s, k);
             ShowWingJamLabel(ref wingJamLabelMy, cellsMinusY, jamMy);
             ShowWingJamLabel(ref wingJamLabelPy, cellsPlusY, jamPy);
             Drive(antennaElements, shownAntenna, 0f);
@@ -120,6 +123,41 @@ namespace Eosat1
                     jamHalo.SetPropertyBlock(mpb);
                 }
             }
+        }
+
+        /// <summary>
+        /// The simulator's solar-array drive turns the wings about the body +Y axis so the cells
+        /// face (cos a, 0, sin a) in body axes (smo-vr/1, deploy.sada_angle_deg). The deploy hinge
+        /// has just set each wing's pose; this turns it on from there, about +Y through its hinge.
+        /// Only when the source sends the angle (the sandbox and the sample orbit don't).
+        /// </summary>
+        void TurnWingsBySada(DisplayState s, float k)
+        {
+            if (!s.HasSada)
+            {
+                haveSada = false;
+                return;
+            }
+            float target = (float)s.SadaDeg;
+            shownSada = haveSada ? shownSada + Mathf.DeltaAngle(shownSada, target) * k : target;
+            haveSada = true;
+            float a = shownSada * Mathf.Deg2Rad;
+            Vector3 wantBody = SimToUnity.Vec(new Vec3d(Mathf.Cos(a), 0.0, Mathf.Sin(a)));
+            Vector3 axis = transform.TransformDirection(SimToUnity.Vec(new Vec3d(0, 1, 0))).normalized;
+            TurnWing(wingMinusY, cellsMinusY, transform.TransformDirection(wantBody), axis);
+            TurnWing(wingPlusY, cellsPlusY, transform.TransformDirection(wantBody), axis);
+        }
+
+        static void TurnWing(DeployableJoint[] joints, Transform cells, Vector3 want, Vector3 axis)
+        {
+            if (joints == null || joints.Length == 0 || joints[0] == null || cells == null) return;
+            // the cells' current facing, flattened onto the plane the drive turns in
+            Vector3 now = Vector3.ProjectOnPlane(cells.forward, axis);
+            Vector3 goal = Vector3.ProjectOnPlane(want, axis);
+            if (now.sqrMagnitude < 1e-6f || goal.sqrMagnitude < 1e-6f) return;
+            float angle = Vector3.SignedAngle(now, goal, axis);
+            Transform hinge = joints[0].transform;
+            hinge.RotateAround(hinge.position, axis, angle);
         }
 
         /// <summary>A red "SOLAR PANEL JAMMED" label in front of a jammed panel, made from the antenna's label the first time it is needed.</summary>

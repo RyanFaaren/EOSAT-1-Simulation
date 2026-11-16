@@ -33,6 +33,8 @@ namespace Eosat1.Core
         public DeployInfo WingMinusY;
         public DeployInfo WingPlusY;
         public DeployInfo Antenna;
+        public bool HasSada;
+        public double SadaDeg;
         public double BodyRateDegS = double.NaN;
 
         /// <summary>Changes whenever the picture should snap instead of animate (time jump, restart).</summary>
@@ -60,6 +62,8 @@ namespace Eosat1.Core
             WingMinusY = f.WingMinusY;
             WingPlusY = f.WingPlusY;
             Antenna = f.Antenna;
+            HasSada = f.HasSada;
+            SadaDeg = f.SadaDeg;
             BodyRateDegS = f.BodyRateDegS;
         }
     }
@@ -245,6 +249,13 @@ namespace Eosat1.Core
                     s.SunlitFraction = a.SunlitFraction + (b.SunlitFraction - a.SunlitFraction) * t;
                 s.WingMinusY = LerpDeploy(a.WingMinusY, b.WingMinusY, t);
                 s.WingPlusY = LerpDeploy(a.WingPlusY, b.WingPlusY, t);
+                if (a.HasSada && b.HasSada)
+                {
+                    // the short way round, so 359 -> 1 doesn't spin the long way
+                    double delta = ((b.SadaDeg - a.SadaDeg) % 360.0 + 540.0) % 360.0 - 180.0;
+                    s.SadaDeg = a.SadaDeg + delta * t;
+                    s.HasSada = true;
+                }
                 if (a.HasVelocity && b.HasVelocity)
                 {
                     s.VelEciKmS = Vec3d.Lerp(a.VelEciKmS, b.VelEciKmS, t);

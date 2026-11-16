@@ -57,6 +57,7 @@ namespace Eosat1.Core
         long lastLineTicks = long.MinValue, lastFrameTicks = long.MinValue, heartbeatTicks = long.MinValue;
         volatile bool connected, lastParseOk;
         volatile string helloText;
+        volatile string schemaProblem;
         volatile int ownBits;
         volatile int lastStatusWord;
 
@@ -68,6 +69,8 @@ namespace Eosat1.Core
         public long Connects { get { return Interlocked.Read(ref connects); } }
         public long LastSeq { get { return Interlocked.Read(ref lastSeq); } }
         public string Hello { get { return helloText; } }
+        /// <summary>Set when the server's hello names a protocol version this code doesn't speak; frames are then ignored.</summary>
+        public string SchemaProblem { get { return schemaProblem; } }
         public int LastStatusWord { get { return lastStatusWord; } }
         public bool IsRunning { get { return thread != null && thread.IsAlive; } }
 
@@ -264,6 +267,11 @@ namespace Eosat1.Core
                 return;
             }
             lastParseOk = true;
+            if (kind == MessageKind.State && frame != null && schemaProblem != null)
+            {
+                lastParseOk = false;   // refusing to draw frames we can't trust; the status word says so
+                return;
+            }
             if (kind == MessageKind.State && frame != null)
             {
                 frame.ArrivalWall = MonoClock.Now;
@@ -276,6 +284,16 @@ namespace Eosat1.Core
             {
                 helloText = text.Length > 240 ? text.Substring(0, 240) + "..." : text;
                 Log("hello: " + helloText);
+                string schema;
+                if (FrameParser.HelloSchemaOk(text, out schema))
+                {
+                    schemaProblem = null;
+                }
+                else
+                {
+                    schemaProblem = "server speaks " + schema + ", this app speaks " + FrameParser.SupportedSchema + ": not drawing its frames";
+                    Log("REFUSED: " + schemaProblem);
+                }
             }
         }
 

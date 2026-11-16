@@ -103,6 +103,9 @@ namespace Eosat1.Core
         public DeployInfo WingMinusY;
         public DeployInfo WingPlusY;
         public DeployInfo Antenna;
+        /// <summary>Solar-array drive angle (deploy.sada_angle_deg): the wing cells face (cos a, 0, sin a) in body axes.</summary>
+        public bool HasSada;
+        public double SadaDeg;
         /// <summary>Body rate magnitude in deg/s if the source provides it, else NaN.</summary>
         public double BodyRateDegS = double.NaN;
 
@@ -236,13 +239,46 @@ namespace Eosat1.Core
                 f.InEclipse = ecl;
             }
             double frac;
-            if (MiniJson.TryNumber(sun, "sunlit_fraction", out frac)) f.SunlitFraction = MathUtil.Clamp01(frac);
+            // smo-vr/1 calls it sun_fraction; sunlit_fraction is the older spelling
+            if (MiniJson.TryNumber(sun, "sun_fraction", out frac) || MiniJson.TryNumber(sun, "sunlit_fraction", out frac))
+                f.SunlitFraction = MathUtil.Clamp01(frac);
 
             var deploy = MiniJson.Obj(d, "deploy");
             f.WingMinusY = ReadDeploy(MiniJson.Obj(deploy, "wing_my"));
             f.WingPlusY = ReadDeploy(MiniJson.Obj(deploy, "wing_py"));
             f.Antenna = ReadDeploy(MiniJson.Obj(deploy, "antenna"));
+            double sada;
+            if (MiniJson.TryNumber(deploy, "sada_angle_deg", out sada) && !double.IsNaN(sada) && !double.IsInfinity(sada))
+            {
+                f.HasSada = true;
+                f.SadaDeg = sada;
+            }
             return true;
+        }
+
+        /// <summary>The protocol this code speaks. A hello whose major version differs is refused.</summary>
+        public const string SupportedSchema = "smo-vr/1";
+
+        /// <summary>
+        /// Read the "schema" of a hello line. Returns false, with the schema it found, when its major
+        /// version is not the one this code speaks (smo-vr/1). A hello without a schema is accepted.
+        /// </summary>
+        public static bool HelloSchemaOk(string line, out string schema)
+        {
+            schema = null;
+            object root;
+            string err;
+            if (!MiniJson.TryParse(line, out root, out err)) return true;
+            var d = root as Dictionary<string, object>;
+            if (d == null || !MiniJson.TryString(d, "schema", out schema) || string.IsNullOrEmpty(schema)) return true;
+            return Major(schema) == Major(SupportedSchema);
+        }
+
+        static string Major(string schema)
+        {
+            string s = schema.Trim().ToLowerInvariant();
+            int dot = s.IndexOf('.', Math.Max(0, s.IndexOf('/')));
+            return dot >= 0 ? s.Substring(0, dot) : s;
         }
 
         static DeployInfo ReadDeploy(Dictionary<string, object> o)
