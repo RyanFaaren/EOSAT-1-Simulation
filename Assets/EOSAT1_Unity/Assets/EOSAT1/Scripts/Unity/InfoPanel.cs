@@ -60,10 +60,16 @@ namespace Eosat1
             showOnScreen = !showOnScreen;
         }
 
+        // set by Build: the weak-connection warning, if there is one
+        string linkWarning;
+        bool linkLost;
+
         void Update()
         {
             bool headset = UnityEngine.XR.XRSettings.isDeviceActive;
-            if (worldPanel != null && worldPanel.activeSelf != (headset && showOnScreen)) worldPanel.SetActive(headset && showOnScreen);
+            // in the headset the panel on the left controller comes up by itself when the link is weak
+            bool wantPanel = headset && (showOnScreen || linkWarning != null);
+            if (worldPanel != null && worldPanel.activeSelf != wantPanel) worldPanel.SetActive(wantPanel);
             Visible = showOnScreen;
             if (Time.unscaledTime < nextRefresh || app == null) return;
             nextRefresh = Time.unscaledTime + refreshInterval;
@@ -82,6 +88,7 @@ namespace Eosat1
 
             if (showOnScreen) DrawStatus(u, pad, margin);
             if (showHelp) DrawHelp(u, pad, margin);
+            DrawLinkWarning();
 
             // the latest message, for a few seconds, fading out at the end
             float age = Time.unscaledTime - app.LastMessageTime;
@@ -94,6 +101,39 @@ namespace Eosat1
                 GUI.Box(new Rect((Screen.width - ms.x) * 0.5f, Screen.height * 0.12f, ms.x, ms.y), mc, HudStyle.Toast);
                 GUI.color = old;
             }
+        }
+
+        /// <summary>A banner across the top while the live link is weak or lost (shown even with the panel hidden).</summary>
+        void DrawLinkWarning()
+        {
+            if (linkWarning == null) return;
+            var content = new GUIContent(linkWarning);
+            Vector2 size = HudStyle.Toast.CalcSize(content);
+            float w = Mathf.Min(size.x, Screen.width - 24f);
+            Color old = GUI.color;
+            float pulse = 0.8f + 0.2f * Mathf.Sin(Time.unscaledTime * 4f);
+            GUI.color = linkLost ? new Color(1f, 0.5f, 0.45f, pulse) : new Color(1f, 0.82f, 0.4f, pulse);
+            GUI.Box(new Rect((Screen.width - w) * 0.5f, Screen.height * 0.04f, w, size.y), content, HudStyle.Toast);
+            GUI.color = old;
+        }
+
+        /// <summary>
+        /// The client asked for graceful degradation: when Live link data stops, keep the picture
+        /// moving by prediction and say so plainly. Null when all is well.
+        /// </summary>
+        void UpdateLinkWarning(EosatApp a, DisplayState s)
+        {
+            linkWarning = null;
+            linkLost = false;
+            if (a.ActiveFeed != FeedKind.Tcp || !s.Valid || s.DataAge < 2.5) return;
+            TcpFeedClient l = a.Link;
+            linkLost = l == null || !l.Connected;
+            string age = s.DataAge < 90.0 ? s.DataAge.ToString("0", Inv) + " s" : (s.DataAge / 60.0).ToString("0", Inv) + " min";
+            string head = linkLost ? "CONNECTION LOST" : "WEAK CONNECTION";
+            string what = s.PredictionCapped ? "prediction stopped, holding the last picture"
+                        : s.Predicting ? "showing a prediction from the last data"
+                        : "waiting for data";
+            linkWarning = head + "  -  no data for " + age + "  -  " + what;
         }
 
         /// <summary>The status panel, top left: a heading, the time, then one row per question.</summary>
@@ -233,6 +273,8 @@ namespace Eosat1
             if (headerChip == "PAUSED") sb.Append("   <color=#ffcc55>PAUSED</color>");
             else if (headerChip.Length > 0) sb.Append("   ").Append(headerChip);
             sb.Append('\n');
+            UpdateLinkWarning(a, s);
+            if (linkWarning != null) sb.Append(linkLost ? Bad(linkWarning) : Warn(linkWarning)).Append('\n');
             BeginRow("Source", "Source  ");
             AppendSource(a, s);
             if (!s.Valid)
@@ -315,8 +357,8 @@ namespace Eosat1
                     TcpFeedClient l = a.Link;
                     sb.Append("LIVE ").Append(a.tcpHost).Append(':').Append(a.tcpPort).Append("  ");
                     if (l == null) sb.Append(Bad("stopped"));
-                    else if (!l.Connected) sb.Append(Bad("not connected"));
-                    else if (s.Valid && s.DataAge > 2.0) sb.Append(Warn("STALE " + s.DataAge.ToString("0", Inv) + " s"));
+                    else if (!l.Connected) sb.Append(Bad(s.Predicting ? "not connected - predicting" : "not connected"));
+                    else if (s.Valid && s.DataAge > 2.5) sb.Append(Warn((s.Predicting ? "WEAK - predicting, " : "STALE ") + s.DataAge.ToString("0", Inv) + " s"));
                     else sb.Append(Good("connected"));
                     if (l != null)
                     {

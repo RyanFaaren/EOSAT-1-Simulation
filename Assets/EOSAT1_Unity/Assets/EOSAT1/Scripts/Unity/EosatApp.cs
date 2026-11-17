@@ -412,6 +412,7 @@ namespace Eosat1
                         replay.Paused = paused;
                         replay.Update(now, pushToTimeline);
                     }
+                    timeline.PredictWhenStale = false;   // a paused recording must stay still
                     timeline.Advance(paused ? 0 : dt);
                     timeline.Sample(state, now);
                     break;
@@ -424,6 +425,7 @@ namespace Eosat1
                         string line;
                         while (tcp.TryDequeueLog(out line)) Say("link: " + line);
                     }
+                    timeline.PredictWhenStale = true;    // weak link: keep it flying on from the last data
                     timeline.Advance(dt);
                     timeline.Sample(state, now);
                     break;

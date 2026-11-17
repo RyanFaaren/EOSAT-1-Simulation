@@ -44,6 +44,14 @@ namespace Eosat1.Core
         public double DataAge;
         /// <summary>Sim seconds per wall second, as observed.</summary>
         public double SimRate = 1.0;
+        /// <summary>
+        /// True while no new frame has come in and the spacecraft is being carried on along its
+        /// orbit and its spin from the last data (Live link only). PredictedS is how far ahead, in sim seconds.
+        /// </summary>
+        public bool Predicting;
+        public double PredictedS;
+        /// <summary>The prediction reached its limit and the picture is holding still.</summary>
+        public bool PredictionCapped;
 
         public void CopyFrom(StateFrame f)
         {
@@ -62,6 +70,9 @@ namespace Eosat1.Core
             WingMinusY = f.WingMinusY;
             WingPlusY = f.WingPlusY;
             Antenna = f.Antenna;
+            Predicting = false;
+            PredictedS = 0;
+            PredictionCapped = false;
             HasSada = f.HasSada;
             SadaDeg = f.SadaDeg;
             BodyRateDegS = f.BodyRateDegS;
@@ -75,6 +86,14 @@ namespace Eosat1.Core
         /// <summary>Sim time going back by more than this is treated as a reload.</summary>
         public double BackwardJumpTolerance = 0.5;
         public int Capacity = 32;
+        /// <summary>When frames stop coming, carry the spacecraft on from the last data (dead reckoning). Live link turns this on.</summary>
+        public bool PredictWhenStale;
+        /// <summary>Wall seconds without data before the link counts as weak (for warnings).</summary>
+        public double StaleAfterS = 2.5;
+        /// <summary>Never predict further ahead than this (sim seconds); after that the picture holds.</summary>
+        public double MaxPredictS = 120.0;
+        bool keepalive;   // the server is repeating its last frame: the link is fine, the simulation is frozen
+        double coast;     // sim seconds the clock has run on past the newest frame (the prediction)
 
         readonly List<StateFrame> frames = new List<StateFrame>();
         double displayT;
@@ -93,6 +112,8 @@ namespace Eosat1.Core
 
         public void Clear()
         {
+            keepalive = false;
+            coast = 0;
             frames.Clear();
             hasDisplay = false;
             lastAccepted = null;
@@ -112,6 +133,8 @@ namespace Eosat1.Core
                 if (f.Seq >= 0 && f.Seq == last.Seq && Math.Abs(dt) < 1e-6)
                 {
                     Duplicates++;
+                    lastArrival = f.ArrivalWall;   // a repeat while frozen still proves the link is alive
+                    keepalive = true;
                     return;
                 }
                 if (dt < -BackwardJumpTolerance)
@@ -126,12 +149,18 @@ namespace Eosat1.Core
                     displayT = f.SimTime;
                     hasDisplay = true;
                     simRate = 1.0;
+                    coast = 0;
                     Discontinuity++;
                     return;
                 }
                 if (dt <= 1e-6)
                 {
-                    if (dt > -1e-6) Duplicates++;
+                    if (dt > -1e-6)
+                    {
+                        Duplicates++;
+                        lastArrival = f.ArrivalWall;
+                        keepalive = true;
+                    }
                     else OutOfOrder++;
                     return;
                 }
@@ -152,6 +181,10 @@ namespace Eosat1.Core
             }
             frames.Add(f);
             while (frames.Count > Capacity) frames.RemoveAt(0);
+            keepalive = false;
+            if (coast > 0 && hasDisplay && !f.JumpFromPrevious)
+                displayT = Math.Min(f.SimTime, displayT + coast);   // pick up where the prediction had got to
+            coast = 0;
             lastAccepted = f;
             lastArrival = f.ArrivalWall;
             if (!hasDisplay)
@@ -184,6 +217,7 @@ namespace Eosat1.Core
             if (n == 1 || newest.JumpFromPrevious)
             {
                 displayT = newest.SimTime;
+                if (PredictWhenStale && !keepalive) coast += dtWall * simRate;
                 return;
             }
             double gap = newest.SimTime - frames[n - 2].SimTime;
@@ -200,7 +234,13 @@ namespace Eosat1.Core
             {
                 displayT += err * Math.Min(1.0, dtWall * 0.8);
             }
-            if (displayT > newest.SimTime) displayT = newest.SimTime;
+            if (displayT >= newest.SimTime)
+            {
+                // caught up with the data: hold the frame clock there, and (live) let the prediction run on
+                displayT = newest.SimTime;
+                if (PredictWhenStale && !keepalive) coast += dtWall * simRate;
+            }
+            else coast = 0;
             if (displayT < frames[0].SimTime) displayT = frames[0].SimTime;
         }
 
@@ -286,7 +326,82 @@ namespace Eosat1.Core
             s.Discontinuity = Discontinuity;
             s.DataAge = double.IsNaN(lastArrival) ? double.PositiveInfinity : Math.Max(0.0, wallNow - lastArrival);
             s.SimRate = simRate;
+            s.Predicting = false;
+            s.PredictedS = 0;
+            s.PredictionCapped = false;
+            Predict(s, wallNow);
             return true;
+        }
+
+        /// <summary>
+        /// Dead reckoning for a weak link: once the display has caught up with the newest frame and
+        /// no new one has come, the clock keeps running (coast) and the spacecraft is carried on from the last data:
+        /// round its orbit (at the speed it had) and on with the spin it had, up to MaxPredictS.
+        /// When a real frame arrives, Advance() snaps back onto it.
+        /// </summary>
+        void Predict(DisplayState s, double wallNow)
+        {
+            int n = frames.Count;
+            if (!PredictWhenStale || keepalive || n == 0 || double.IsNaN(lastArrival)) return;
+            StateFrame last = frames[n - 1];
+            if (displayT < last.SimTime - 1e-6) return;   // still playing frames we have
+            double ahead = coast;                          // how far the clock has run on past the newest frame
+            if (ahead <= 1e-6) return;
+            if (ahead > MaxPredictS)
+            {
+                ahead = MaxPredictS;
+                s.PredictionCapped = true;
+            }
+
+            // position: round the orbit (a circle through the last position, at the last speed)
+            Vec3d r = last.PosEciKm;
+            if (s.HasVelocity)
+            {
+                Vec3d v = s.VelEciKmS;
+                Vec3d h = Vec3d.Cross(r, v);
+                double hl = h.Length, rl = r.Length;
+                if (hl > 1e-6 && rl > 1.0)
+                {
+                    Vec3d k = h / hl;
+                    double theta = v.Length / rl * ahead;
+                    s.PosEciKm = RotateAbout(r, k, theta);
+                    s.VelEciKmS = RotateAbout(v, k, theta);
+                }
+                else s.PosEciKm = r + v * ahead;
+            }
+            else s.PosEciKm = r;
+
+            // attitude: keep turning the way it was turning between the last two frames
+            QuatD q = last.QBodyToEci;
+            if (n >= 2 && !last.JumpFromPrevious)
+            {
+                StateFrame prev = frames[n - 2];
+                double span = last.SimTime - prev.SimTime;
+                if (span > 1e-6 && span <= 30.0)
+                {
+                    QuatD dq = (prev.QBodyToEci.Conjugate * last.QBodyToEci).Normalized;
+                    if (dq.w < 0) dq = new QuatD(-dq.x, -dq.y, -dq.z, -dq.w);
+                    double half = Math.Acos(MathUtil.Clamp(dq.w, -1.0, 1.0));
+                    double sinHalf = Math.Sin(half);
+                    if (sinHalf > 1e-9)
+                    {
+                        var axis = new Vec3d(dq.x / sinHalf, dq.y / sinHalf, dq.z / sinHalf);
+                        q = (last.QBodyToEci * QuatD.AxisAngle(axis, 2.0 * half * ahead / span)).Normalized;
+                    }
+                }
+            }
+            s.QBodyToEci = q;
+            s.SimTime = last.SimTime + ahead;
+            s.Interpolating = false;
+            s.Predicting = true;
+            s.PredictedS = ahead;
+        }
+
+        /// <summary>Rodrigues: turn x about the unit axis k by theta radians.</summary>
+        static Vec3d RotateAbout(Vec3d x, Vec3d k, double theta)
+        {
+            double c = Math.Cos(theta), sn = Math.Sin(theta);
+            return x * c + Vec3d.Cross(k, x) * sn + k * (Vec3d.Dot(k, x) * (1.0 - c));
         }
 
         static DeployInfo LerpDeploy(DeployInfo a, DeployInfo b, double t)
