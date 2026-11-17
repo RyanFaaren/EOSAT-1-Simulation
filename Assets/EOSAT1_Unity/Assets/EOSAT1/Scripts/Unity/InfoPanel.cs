@@ -292,6 +292,7 @@ namespace Eosat1
                 else sb.Append("no station in view");
                 sb.Append('\n');
             }
+            if (s.Power != null) AppendPower(s.Power);
             if (a.ActiveFeed == FeedKind.Tcp && (s.Frozen || !double.IsNaN(s.Speed)))
             {
                 BeginRow("Sim speed", "Sim speed        ");
@@ -318,6 +319,49 @@ namespace Eosat1
             }
             EndRow();
             text = sb.ToString();
+        }
+
+        /// <summary>Channel 2 (power): what the arrays make, what's used, the battery, and any trouble.</summary>
+        void AppendPower(PowerInfo p)
+        {
+            if (!double.IsNaN(p.NetW) || !double.IsNaN(p.GeneratedW))
+            {
+                BeginRow("Power", "Power            ");
+                if (!double.IsNaN(p.NetW))
+                {
+                    string net = (p.NetW >= 0 ? "+" : "") + p.NetW.ToString("0.0", Inv) + " W";
+                    sb.Append(p.NetW >= 0 ? Good(net) : Warn(net)).Append(p.NetW >= 0 ? " spare" : " short");
+                }
+                if (!double.IsNaN(p.GeneratedW)) sb.Append("   makes ").Append(p.GeneratedW.ToString("0.0", Inv)).Append(" W");
+                if (!double.IsNaN(p.ConsumedW)) sb.Append(", uses ").Append(p.ConsumedW.ToString("0.0", Inv)).Append(" W");
+                if (!double.IsNaN(p.BusVoltageV)) sb.Append("   bus ").Append(p.BusVoltageV.ToString("0.0", Inv)).Append(" V");
+                sb.Append('\n');
+            }
+            if (!double.IsNaN(p.WingPyW) || !double.IsNaN(p.WingMyW))
+            {
+                BeginRow("Solar output", "Solar output     ");
+                sb.Append("-Y ").Append(Watts(p.WingMyW)).Append("   +Y ").Append(Watts(p.WingPyW));
+                if (!double.IsNaN(p.BodyFacesW)) sb.Append("   body ").Append(Watts(p.BodyFacesW));
+                if (p.HasStrings && (!p.StringAEnabled || !p.StringBEnabled))
+                    sb.Append("  ").Append(Bad("STRING " + (!p.StringAEnabled && !p.StringBEnabled ? "A+B" : !p.StringAEnabled ? "A" : "B") + " OFF"));
+                sb.Append('\n');
+            }
+            if (!double.IsNaN(p.BatterySocPct))
+            {
+                BeginRow("Battery", "Battery          ");
+                string soc = p.BatterySocPct.ToString("0", Inv) + "%";
+                sb.Append(p.BatterySocPct < 15 ? Bad(soc) : p.BatterySocPct < 35 ? Warn(soc) : Good(soc));
+                if (p.HasCharging) sb.Append(p.Charging ? "  charging" : "  draining");
+                if (!double.IsNaN(p.BatteryVoltageV)) sb.Append("   ").Append(p.BatteryVoltageV.ToString("0.0", Inv)).Append(" V");
+                if (!double.IsNaN(p.BatteryTempC)) sb.Append("   ").Append(p.BatteryTempC.ToString("0", Inv)).Append(" \u00b0C");
+                if (p.LoadShedStage > 0) sb.Append("  ").Append(Bad("LOAD SHED " + p.LoadShedStage));
+                sb.Append('\n');
+            }
+        }
+
+        static string Watts(double w)
+        {
+            return double.IsNaN(w) ? "?" : w.ToString("0.0", Inv) + " W";
         }
 
         /// <summary>COARSE_SUN -> Coarse sun; keeps short words (LEOP, SAFE) as they are.</summary>
@@ -355,7 +399,9 @@ namespace Eosat1
                     break;
                 case FeedKind.Tcp:
                     TcpFeedClient l = a.Link;
-                    sb.Append("LIVE ").Append(TcpFeedClient.Describe(a.tcpHost, a.tcpPort)).Append("  ");
+                    sb.Append("LIVE ").Append(l != null ? l.ActiveEndpoint : TcpFeedClient.Describe(a.tcpHost, a.tcpPort));
+                    if (l != null && l.Connected && l.OnPowerChannel) sb.Append(" (with power)");
+                    sb.Append("  ");
                     if (l == null) sb.Append(Bad("stopped"));
                     else if (!l.Connected) sb.Append(Bad(s.Predicting ? "not connected - predicting" : "not connected"));
                     else if (s.Valid && s.DataAge > 2.5) sb.Append(Warn((s.Predicting ? "WEAK - predicting, " : "STALE ") + s.DataAge.ToString("0", Inv) + " s"));

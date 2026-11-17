@@ -42,7 +42,16 @@ namespace Eosat1
         Renderer jamGlow;
         GameObject jamLabel, sensorLabel, contactLabel, frozenLabel;
         readonly GameObject[] wingJamLabel = new GameObject[2];
-        TextMesh sensorText, contactText;
+        TextMesh sensorText, contactText, batteryText;
+        // channel 2 (power): a watt label on each wing, the battery, and cells that brighten with output
+        readonly GameObject[] wingPowerLabel = new GameObject[2];
+        readonly TextMesh[] wingPowerText = new TextMesh[2];
+        GameObject batteryLabel;
+        readonly System.Collections.Generic.List<Renderer>[] cellFaces =
+            { new System.Collections.Generic.List<Renderer>(), new System.Collections.Generic.List<Renderer>() };
+        float peakWingW = 20f;
+        readonly float[] shownGlow = { 1f, 1f };
+        MaterialPropertyBlock cellBlock;
         GameObject[] hidden;
         float shownMy, shownPy, shownAntenna, shownJam;
         int lastDiscontinuity = int.MinValue;
@@ -117,14 +126,14 @@ namespace Eosat1
                 innerHinge[w] = h;
                 // in the hinge's frame (stowed): the panel runs down the face (Unity +Y = body +Z),
                 // and its cell side faces away from the bus (Unity +-Z = body +-Y)
-                Transform inner = Panel("Inner panel", h, side, cellsMat, back);
+                Transform inner = Panel("Inner panel", h, side, cellsMat, back, w);
                 cells[w] = inner.Find("Cells");
 
                 var h2 = new GameObject("Fold").transform;
                 h2.SetParent(h, false);
                 h2.localPosition = new Vector3(0f, PanelOut * displayScale, side * 0.006f * displayScale);
                 outerHinge[w] = h2;
-                Panel("Outer panel", h2, side, cellsMat, back);
+                Panel("Outer panel", h2, side, cellsMat, back, w);
             }
 
             // UHF antenna: 4 tape springs, one from each zenith-deck corner, out along the diagonals
@@ -170,6 +179,21 @@ namespace Eosat1
                     wingJamLabel[w].transform.localPosition = new Vector3(0f, PanelOut * displayScale, (w == 0 ? -1f : 1f) * 0.25f);
                 }
             }
+
+            for (int w = 0; w < 2; w++)
+            {
+                float side = w == 0 ? -1f : 1f;
+                wingPowerLabel[w] = Label("Wing Power Label", Vector3.zero, "", new Color(0.6f, 1f, 0.7f));
+                if (wingPowerLabel[w] != null)
+                {
+                    wingPowerLabel[w].transform.SetParent(innerHinge[w], false);
+                    // just past the outer panel's tip, on the cell side
+                    wingPowerLabel[w].transform.localPosition = new Vector3(0f, PanelOut * displayScale * 2.25f, side * 0.12f);
+                    wingPowerText[w] = wingPowerLabel[w].GetComponent<TextMesh>();
+                }
+            }
+            batteryLabel = Label("Battery Label", U(-0.22f, 0, 0), "", new Color(0.6f, 1f, 0.7f));
+            batteryText = batteryLabel != null ? batteryLabel.GetComponent<TextMesh>() : null;
 
             // tell the rest of the app about the new cells: zenith when deployed (body -Z)
             view.cellsMinusY = cells[0];
@@ -228,7 +252,7 @@ namespace Eosat1
         /// One 209 x 342 mm panel on a hinge, drawn stowed (running down Unity +Y from the hinge).
         /// Its "Cells" child faces the cell side: away from the bus (side = -1 for -Y, +1 for +Y).
         /// </summary>
-        Transform Panel(string name, Transform hinge, float side, Material cellsMat, Material backMat)
+        Transform Panel(string name, Transform hinge, float side, Material cellsMat, Material backMat, int wing)
         {
             var p = new GameObject(name).transform;
             p.SetParent(hinge, false);
@@ -247,6 +271,7 @@ namespace Eosat1
             q.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             q.transform.localScale = new Vector3(wid * 0.96f, len * 0.94f, 1f);
             q.GetComponent<Renderer>().sharedMaterial = cellsMat != null ? cellsMat : Fallback(new Color(0.08f, 0.12f, 0.35f));
+            cellFaces[wing].Add(q.GetComponent<Renderer>());
             return p;
         }
 
@@ -346,6 +371,47 @@ namespace Eosat1
             if (contactText != null && contact)
                 contactText.text = string.IsNullOrEmpty(s.GroundStation) ? "GROUND CONTACT" : "IN CONTACT: " + s.GroundStation;
             Show(contactLabel, contact);
+
+            ShowPower(s.Power);
+        }
+
+        /// <summary>Channel 2: watts on each wing, the battery's charge, and the cells brighten with output.</summary>
+        void ShowPower(PowerInfo p)
+        {
+            for (int w = 0; w < 2; w++)
+            {
+                double watts = p == null ? double.NaN : (w == 0 ? p.WingMyW : p.WingPyW);
+                bool has = !double.IsNaN(watts);
+                if (has && wingPowerText[w] != null)
+                {
+                    wingPowerText[w].text = (w == 0 ? "-Y " : "+Y ") + watts.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " W";
+                    wingPowerText[w].color = watts > 0.5 ? new Color(0.6f, 1f, 0.7f) : new Color(0.65f, 0.68f, 0.72f);
+                }
+                Show(wingPowerLabel[w], has);
+
+                // brightness 0.45 (no output) .. 1 (the most this run has seen); plain when there's no power data
+                if (has) peakWingW = Mathf.Max(peakWingW, (float)watts);
+                float want = has ? Mathf.Lerp(0.45f, 1f, Mathf.Clamp01((float)watts / peakWingW)) : 1f;
+                shownGlow[w] = Mathf.MoveTowards(shownGlow[w], want, Time.deltaTime * 0.8f);
+                if (cellBlock == null) cellBlock = new MaterialPropertyBlock();
+                Color c = new Color(shownGlow[w], shownGlow[w], shownGlow[w], 1f);
+                cellBlock.SetColor(BaseColorId, c);
+                cellBlock.SetColor(ColorId, c);
+                foreach (Renderer r in cellFaces[w]) if (r != null) r.SetPropertyBlock(cellBlock);
+            }
+
+            bool battery = p != null && !double.IsNaN(p.BatterySocPct);
+            if (battery && batteryText != null)
+            {
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                string t = "BATTERY " + p.BatterySocPct.ToString("0", inv) + "%";
+                if (p.HasCharging) t += p.Charging ? "  CHARGING" : "  DRAINING";
+                if (p.LoadShedStage > 0) t += "\nLOAD SHED " + p.LoadShedStage.ToString(inv);
+                batteryText.text = t;
+                batteryText.color = p.BatterySocPct < 15 || p.LoadShedStage > 0 ? new Color(1f, 0.4f, 0.35f)
+                                  : p.BatterySocPct < 35 ? new Color(1f, 0.82f, 0.4f) : new Color(0.6f, 1f, 0.7f);
+            }
+            Show(batteryLabel, battery);
         }
 
         static void Show(GameObject g, bool on)

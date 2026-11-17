@@ -594,7 +594,7 @@ namespace Eosat1
             }
             StopProbe();
             probeHost = editHost;
-            probe = new TcpFeedClient { Host = probeHost, Port = MenuSettings.SimPort, SendStatus = false };
+            probe = new TcpFeedClient { Host = probeHost, Port = MenuSettings.SimPort, SendStatus = false, PreferPower = false };
             probe.Start();
             bool cloud = TcpFeedClient.IsWebSocketAddress(probeHost);
             probeEnds = Time.realtimeSinceStartupAsDouble + (cloud ? 12.0 : 4.0);   // the internet is slower than the desk

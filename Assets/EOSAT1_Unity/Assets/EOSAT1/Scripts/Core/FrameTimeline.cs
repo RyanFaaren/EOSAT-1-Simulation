@@ -42,6 +42,8 @@ namespace Eosat1.Core
         public double MetS = double.NaN;
         public string AocsMode, Pointing, ScMode, Phase, GroundStation, AntennaSensor;
         public bool HasContact, InContact, HasAntennaTruth, AntennaDeployedTruth;
+        /// <summary>Channel 2's power numbers (shared with the frame: read only), or null.</summary>
+        public PowerInfo Power;
         /// <summary>
         /// The instructor froze the simulator: speed 0, or the server is repeating its last frame
         /// (the link is alive but simulation time is standing still).
@@ -119,6 +121,7 @@ namespace Eosat1.Core
             HasAntennaTruth = f.HasAntennaTruth;
             AntennaDeployedTruth = f.AntennaDeployedTruth;
             AntennaSensor = f.AntennaSensor;
+            Power = f.Power;
         }
     }
 
@@ -282,6 +285,7 @@ namespace Eosat1.Core
                 held.AntennaDeployedTruth = f.AntennaDeployedTruth;
             }
             if (f.AntennaSensor != null) held.AntennaSensor = f.AntennaSensor;
+            if (f.Power != null) held.Power = f.Power;
         }
 
         static void CarryOver(StateFrame prev, StateFrame f)

@@ -76,6 +76,25 @@ namespace Eosat1.Core
         }
     }
 
+    /// <summary>
+    /// The "power" block of channel 2 (ICD 5a). Numbers the frame leaves out are NaN.
+    /// wings.sada_angle_deg is DO NOT USE for the VR project and is not read.
+    /// </summary>
+    [Serializable]
+    public sealed class PowerInfo
+    {
+        public double BusVoltageV = double.NaN, GeneratedW = double.NaN, ConsumedW = double.NaN, NetW = double.NaN;
+        public double WingPyW = double.NaN, WingMyW = double.NaN, WingPyA = double.NaN, WingMyA = double.NaN;
+        /// <summary>The body-mounted cells, all six faces together (wings excluded).</summary>
+        public double BodyFacesW = double.NaN;
+        public bool HasStrings, StringAEnabled = true, StringBEnabled = true;
+        public double BatterySocPct = double.NaN, BatteryVoltageV = double.NaN, BatteryCurrentA = double.NaN, BatteryTempC = double.NaN;
+        public bool HasCharging, Charging;
+        public int LoadShedStage = -1;
+
+        public PowerInfo Clone() { return (PowerInfo)MemberwiseClone(); }
+    }
+
     public enum MessageKind
     {
         Unknown = 0,
@@ -131,6 +150,8 @@ namespace Eosat1.Core
         public bool AntennaDeployedTruth;
         /// <summary>deploy.antenna.sensor: what the microswitch reports (UNKNOWN STOWED DEPLOYED JAMMED).</summary>
         public string AntennaSensor;
+        /// <summary>Channel 2's power block, or null on channel 1.</summary>
+        public PowerInfo Power;
 
         // set by the receiving side
         public double ArrivalWall;
@@ -138,7 +159,9 @@ namespace Eosat1.Core
 
         public StateFrame Clone()
         {
-            return (StateFrame)MemberwiseClone();
+            var c = (StateFrame)MemberwiseClone();
+            if (Power != null) c.Power = Power.Clone();
+            return c;
         }
     }
 
@@ -303,6 +326,8 @@ namespace Eosat1.Core
             }
             string gs;
             if (MiniJson.TryString(mission, "ground_station", out gs) && gs != null) f.GroundStation = gs.Trim();
+
+            f.Power = ReadPower(MiniJson.Obj(d, "power"));
             return true;
         }
 
@@ -329,6 +354,58 @@ namespace Eosat1.Core
             string s = schema.Trim().ToLowerInvariant();
             int dot = s.IndexOf('.', Math.Max(0, s.IndexOf('/')));
             return dot >= 0 ? s.Substring(0, dot) : s;
+        }
+
+        static PowerInfo ReadPower(Dictionary<string, object> p)
+        {
+            if (p == null) return null;
+            var w = new PowerInfo();
+            w.BusVoltageV = Num(p, "bus_voltage_v");
+            w.GeneratedW = Num(p, "generated_w");
+            w.ConsumedW = Num(p, "consumed_w");
+            w.NetW = Num(p, "net_w");
+            if (double.IsNaN(w.NetW) && !double.IsNaN(w.GeneratedW) && !double.IsNaN(w.ConsumedW)) w.NetW = w.GeneratedW - w.ConsumedW;
+            var wings = MiniJson.Obj(p, "wings");
+            var py = MiniJson.Obj(wings, "wing_py");
+            var my = MiniJson.Obj(wings, "wing_my");
+            w.WingPyW = Num(py, "power_w");
+            w.WingMyW = Num(my, "power_w");
+            w.WingPyA = Num(py, "current_a");
+            w.WingMyA = Num(my, "current_a");
+            var faces = MiniJson.Obj(p, "body_faces");
+            if (faces != null)
+            {
+                double sum = 0;
+                bool any = false;
+                foreach (var kv in faces)
+                {
+                    double fw = Num(kv.Value as Dictionary<string, object>, "power_w");
+                    if (double.IsNaN(fw)) continue;
+                    sum += fw;
+                    any = true;
+                }
+                if (any) w.BodyFacesW = sum;
+            }
+            var strings = MiniJson.Obj(p, "strings");
+            bool en;
+            if (MiniJson.TryBool(MiniJson.Obj(strings, "a"), "enabled", out en)) { w.HasStrings = true; w.StringAEnabled = en; }
+            if (MiniJson.TryBool(MiniJson.Obj(strings, "b"), "enabled", out en)) { w.HasStrings = true; w.StringBEnabled = en; }
+            var bat = MiniJson.Obj(p, "battery");
+            w.BatterySocPct = Num(bat, "soc_pct");
+            w.BatteryVoltageV = Num(bat, "voltage_v");
+            w.BatteryCurrentA = Num(bat, "current_a");
+            w.BatteryTempC = Num(bat, "temp_c");
+            bool ch;
+            if (MiniJson.TryBool(bat, "charging", out ch)) { w.HasCharging = true; w.Charging = ch; }
+            double shed;
+            if (MiniJson.TryNumber(p, "load_shed_stage", out shed) && shed >= 0 && shed < 100) w.LoadShedStage = (int)shed;
+            return w;
+        }
+
+        static double Num(Dictionary<string, object> o, string key)
+        {
+            double v;
+            return MiniJson.TryNumber(o, key, out v) ? v : double.NaN;
         }
 
         /// <summary>An enum-like word, upper case, or null when absent or empty.</summary>

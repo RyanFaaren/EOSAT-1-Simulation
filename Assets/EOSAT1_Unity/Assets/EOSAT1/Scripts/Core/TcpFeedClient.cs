@@ -53,6 +53,12 @@ namespace Eosat1.Core
         public double ReconnectDelayS = 2.0;
         public double ConnectTimeoutS = 3.0;
         public string AppName = "EOSAT1-Unity-VR";
+        /// <summary>
+        /// Connect to channel 2 (power, ICD 5a) when the server has it: the same frames plus a
+        /// "power" block. TCP 8100 -> 8102; ws://host:8101/vr -> ws://host:8103/vr; .../vr -> .../vr/power.
+        /// If it won't connect twice running, fall back to channel 1 (and try power again now and then).
+        /// </summary>
+        public bool PreferPower = true;
         public int MaxLineBytes = 1 << 20;
 
         readonly ConcurrentQueue<StateFrame> frames = new ConcurrentQueue<StateFrame>();
@@ -86,6 +92,39 @@ namespace Eosat1.Core
         volatile int lastStatusWord;
 
         public bool Connected { get { return connected; } }
+        /// <summary>What it is connected to (or last tried), e.g. "127.0.0.1:8102".</summary>
+        public string ActiveEndpoint { get { return activeEndpoint ?? Describe(Host, Port); } }
+        /// <summary>True while the connection is to the power channel.</summary>
+        public bool OnPowerChannel { get { return onPower; } }
+
+        volatile string activeEndpoint;
+        volatile bool onPower;
+        int powerFailures, attempts;
+
+        /// <summary>The power channel's TCP port for a state-channel port (8100 -> 8102).</summary>
+        public static int PowerPort(int port) { return port + 2; }
+
+        /// <summary>The power channel's WebSocket address, or null when there's no sensible guess.</summary>
+        public static string PowerUrl(string url)
+        {
+            Uri u;
+            if (!IsWebSocketAddress(url) || !Uri.TryCreate(url, UriKind.Absolute, out u)) return null;
+            var b = new UriBuilder(u);
+            string path = u.AbsolutePath.TrimEnd('/');
+            if (path.EndsWith("/power", StringComparison.OrdinalIgnoreCase)) return url;
+            if (!u.IsDefaultPort && u.Port == 8101) b.Port = 8103;            // the laptop: 8101 -> 8103, same path
+            else if (path.EndsWith("/vr", StringComparison.OrdinalIgnoreCase)) b.Path = path + "/power";   // the cloud
+            else return null;
+            return b.Uri.ToString();
+        }
+
+        /// <summary>Try the power channel on this attempt?</summary>
+        bool PowerThisTime()
+        {
+            attempts++;
+            if (!PreferPower) return false;
+            return powerFailures < 2 || attempts % 6 == 0;
+        }
         public long LinesReceived { get { return Interlocked.Read(ref linesReceived); } }
         public long FramesParsed { get { return Interlocked.Read(ref framesParsed); } }
         public long ParseErrors { get { return Interlocked.Read(ref parseErrors); } }
@@ -183,21 +222,28 @@ namespace Eosat1.Core
             while (!stop)
             {
                 Socket s = null;
+                bool power = PowerThisTime();
+                int port = power ? PowerPort(Port) : Port;
+                bool linked = false;
+                activeEndpoint = Describe(Host, port);
+                onPower = power;
                 try
                 {
                     IPAddress addr = Resolve(Host);
                     s = new Socket(addr.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
                     socket = s;
-                    IAsyncResult ar = s.BeginConnect(new IPEndPoint(addr, Port), null, null);
+                    IAsyncResult ar = s.BeginConnect(new IPEndPoint(addr, port), null, null);
                     if (!ar.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(ConnectTimeoutS)))
                         throw new SocketException((int)SocketError.TimedOut);
                     s.EndConnect(ar);
                     s.NoDelay = true;
+                    linked = true;
+                    if (power) powerFailures = 0;
                     connected = true;
                     Interlocked.Increment(ref connects);
                     lineLen = 0;
                     discarding = false;
-                    Log("connected to " + Describe(Host, Port));
+                    Log("connected to " + Describe(Host, port) + (power ? " (power channel)" : ""));
                     double nextStatus = MonoClock.Now + StatusIntervalS;
                     while (!stop)
                     {
@@ -246,6 +292,7 @@ namespace Eosat1.Core
                 }
                 catch (Exception e)
                 {
+                    if (power && !linked && ++powerFailures == 2) Log("no power channel on " + Describe(Host, port) + ": using " + Describe(Host, Port));
                     if (!stop) Log("link: " + e.Message);
                 }
                 finally
@@ -274,6 +321,13 @@ namespace Eosat1.Core
             while (!stop)
             {
                 ClientWebSocket ws = null;
+                string powerUrl = PowerUrl(Host);
+                bool power = powerUrl != null && PowerThisTime();
+                if (powerUrl == null) attempts++;
+                string url = power ? powerUrl : Host;
+                bool linked = false;
+                activeEndpoint = url;
+                onPower = power;
                 try
                 {
                     ws = new ClientWebSocket();
@@ -281,10 +335,12 @@ namespace Eosat1.Core
                     webSocket = ws;
                     // the cloud is further away than a laptop on the desk: DNS and TLS take a moment
                     using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(ConnectTimeoutS, 10.0))))
-                        ws.ConnectAsync(new Uri(Host), cts.Token).GetAwaiter().GetResult();
+                        ws.ConnectAsync(new Uri(url), cts.Token).GetAwaiter().GetResult();
+                    linked = true;
+                    if (power) powerFailures = 0;
                     connected = true;
                     Interlocked.Increment(ref connects);
-                    Log("connected to " + Host);
+                    Log("connected to " + url + (power ? " (power channel)" : ""));
                     double nextStatus = MonoClock.Now + StatusIntervalS;
                     int msgLen = 0;
                     bool discarding = false;
@@ -337,6 +393,7 @@ namespace Eosat1.Core
                 }
                 catch (Exception e)
                 {
+                    if (power && !linked && ++powerFailures == 2) Log("no power channel at " + url + ": using " + Host);
                     if (!stop)
                     {
                         Exception inner = e;
