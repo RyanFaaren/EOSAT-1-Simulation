@@ -21,6 +21,45 @@ namespace Eosat1
         const string KeyInfo = "eosat1.menu.infoPanel";
         const string KeyHints = "eosat1.menu.hints";
         const string KeySnap = "eosat1.menu.snapTurn";
+        const string KeyHost = "eosat1.menu.simHost";
+
+        /// <summary>The simulator's TCP port (smo-vr/1).</summary>
+        public const int SimPort = 8100;
+        public const string ThisComputer = "127.0.0.1";
+
+        /// <summary>
+        /// The address of the laptop running the simulator or vr_stub.py, used by Live link.
+        /// Typed on the menu's Settings screen and remembered between runs.
+        /// </summary>
+        public static string SimHost
+        {
+            get
+            {
+                string h = PlayerPrefs.GetString(KeyHost, ThisComputer);
+                return IsValidAddress(h) ? h : ThisComputer;
+            }
+            set { if (IsValidAddress(value)) PlayerPrefs.SetString(KeyHost, value); }
+        }
+
+        /// <summary>A whole IPv4 address: four numbers 0-255 with dots, e.g. 192.168.1.42.</summary>
+        public static bool IsValidAddress(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            string[] parts = s.Split('.');
+            if (parts.Length != 4) return false;
+            foreach (string p in parts)
+            {
+                if (p.Length < 1 || p.Length > 3) return false;
+                int n = 0;
+                foreach (char c in p)
+                {
+                    if (c < '0' || c > '9') return false;
+                    n = n * 10 + (c - '0');
+                }
+                if (n > 255) return false;
+            }
+            return true;
+        }
 
         // ------------------------------------------------------------------ values
         public static FeedKind Feed
@@ -105,6 +144,12 @@ namespace Eosat1
         {
             if (!LaunchedFromMenu || app == null) return;
             app.feed = Feed;
+            // the address only matters for Live link; Sandbox and Replay never use it
+            if (Feed == FeedKind.Tcp)
+            {
+                app.tcpHost = SimHost;
+                app.tcpPort = SimPort;
+            }
             if (app.speedSteps != null && app.speedSteps.Length > 0)
             {
                 float want = StartSpeed;

@@ -24,6 +24,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using Eosat1.Core;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.XR;
@@ -89,7 +90,19 @@ namespace Eosat1
         }
         readonly List<ScreenRect> screens = new List<ScreenRect>();
         readonly List<MenuButton> buttons = new List<MenuButton>();
-        readonly MenuButton[] settingButtons = new MenuButton[6];
+        // settings rows: 0 language, 1 data source, 2 simulator address, 3 speed, 4 info panel, 5 hints, 6 snap
+        readonly MenuButton[] settingButtons = new MenuButton[7];
+        const int AddressRow = 2;
+        TextMesh addressNote;
+
+        // the simulator address editor (a keypad page on the Settings screen)
+        GameObject settingsPage, addressPage;
+        bool editingAddress;
+        string editHost = "";
+        TextMesh addressText, addressStatus;
+        TcpFeedClient probe;
+        double probeEnds;
+        string probeHost;
         MenuButton hovered;
         TextMesh hintText, feedDescription, clockText, statusValues, goText, trackReadout;
         string hintOverride;
@@ -178,6 +191,8 @@ namespace Eosat1
             screens.Clear();
             buttons.Clear();
             for (int i = 0; i < settingButtons.Length; i++) settingButtons[i] = null;
+            StopProbe();
+            editingAddress = false;
             hovered = null;
             grabbing = false;
             spinSpeed = 0f;
@@ -197,6 +212,7 @@ namespace Eosat1
         void OnDisable()
         {
             Font.textureRebuilt -= OnFontRebuilt;
+            StopProbe();
         }
 
         void OnFontRebuilt(Font f)
@@ -380,15 +396,17 @@ namespace Eosat1
         {
             Transform screen = BuildScreen("Settings Screen", StandSpot(SettingsYaw), SettingsYaw, new Vector2(3f, 2.9f), true);
             Transform s = MenuKit.Group("Settings Page", screen, new Vector3(0f, 0f, -0.015f));
+            settingsPage = s.gameObject;
             Label("Header", s, new Vector3(0f, 1.24f, 0f), MenuKit.Spaced(T("set.title")), 0.15f, Color.white, TextAnchor.MiddleCenter);
             Divider(s, 1.08f, 2.8f);
 
-            string[] names = { T("set.language"), T("set.source"), T("set.speed"), T("set.info"), T("set.hints"), T("set.snap") };
-            string[] notes = { T("note.language"), "", T("note.speed"), T("note.info"), T("note.hints"), T("note.snap") };
+            string[] names = { T("set.language"), T("set.source"), T("set.address"), T("set.speed"), T("set.info"), T("set.hints"), T("set.snap") };
+            string[] notes = { T("note.language"), "", "", T("note.speed"), T("note.info"), T("note.hints"), T("note.snap") };
             Action[] actions =
             {
                 null,   // language: rebuilds everything, handled below
                 delegate { MenuSettings.NextFeed(); },
+                null,   // simulator address: opens the keypad, handled below
                 delegate { MenuSettings.NextSpeed(); },
                 delegate { MenuSettings.ShowInfoPanel = !MenuSettings.ShowInfoPanel; },
                 delegate { MenuSettings.ShowHints = !MenuSettings.ShowHints; },
@@ -396,19 +414,22 @@ namespace Eosat1
             };
             for (int i = 0; i < names.Length; i++)
             {
-                float y = 0.84f - 0.32f * i;
-                Label("Setting Name", s, new Vector3(-1.38f, y + 0.045f, 0f), names[i], 0.09f, TextBright, TextAnchor.MiddleLeft);
-                TextMesh note = Label("Setting Note", s, new Vector3(-1.38f, y - 0.075f, 0f), notes[i], 0.056f, ActionText, TextAnchor.MiddleLeft);
+                float y = 0.86f - 0.28f * i;
+                Label("Setting Name", s, new Vector3(-1.38f, y + 0.045f, 0f), names[i], 0.085f, TextBright, TextAnchor.MiddleLeft);
+                TextMesh note = Label("Setting Note", s, new Vector3(-1.38f, y - 0.07f, 0f), notes[i], 0.052f, ActionText, TextAnchor.MiddleLeft);
                 if (i == 1) feedDescription = note;
+                if (i == AddressRow) addressNote = note;
                 Action change = actions[i];
                 Action onClick;
-                if (change == null)
+                if (i == 0)
                     onClick = delegate
                     {
                         MenuText.NextLanguage();
                         MenuSettings.Save();
                         Rebuild();
                     };
+                else if (i == AddressRow)
+                    onClick = OpenAddressEditor;
                 else
                     onClick = delegate
                     {
@@ -416,10 +437,202 @@ namespace Eosat1
                         MenuSettings.Save();
                         RefreshSettings();
                     };
-                settingButtons[i] = Button("Setting Button", s, new Vector3(0.8f, y, 0f), new Vector2(1.2f, 0.24f), "", 0.085f, false, onClick);
+                settingButtons[i] = Button("Setting Button", s, new Vector3(0.8f, y, 0f), new Vector2(1.2f, 0.22f), "", 0.08f, false, onClick);
             }
             Button("Back Button", s, new Vector3(0f, -1.24f, 0f), new Vector2(1.4f, 0.22f), T("btn.back"), 0.09f, true,
                    delegate { Face(0f, "hint.turnBack"); });
+
+            BuildAddressPage(screen);
+        }
+
+        // ------------------------------------------------------------------ simulator address
+        /// <summary>A keypad for typing the simulator's IP address, in place of the settings while it's open.</summary>
+        void BuildAddressPage(Transform screen)
+        {
+            Transform p = MenuKit.Group("Address Page", screen, new Vector3(0f, 0f, -0.015f));
+            addressPage = p.gameObject;
+            Label("Header", p, new Vector3(0f, 1.24f, 0f), MenuKit.Spaced(T("set.address")), 0.13f, Color.white, TextAnchor.MiddleCenter);
+            Divider(p, 1.08f, 2.8f);
+            Label("Help", p, new Vector3(0f, 0.96f, 0f), T("addr.help"), 0.055f, ActionText, TextAnchor.MiddleCenter);
+
+            // the address as you type it
+            MenuKit.Panel("Address Box", p, panelShader, new Vector3(0f, 0.72f, 0f), new Vector2(2.6f, 0.3f),
+                          new Color(0.01f, 0.03f, 0.06f, 1f), new Color(0.01f, 0.03f, 0.06f, 1f),
+                          new Color(accent.r, accent.g, accent.b, 0.9f), 0.03f, 0.2f, MenuKit.OrderButton);
+            addressText = Label("Address", p, new Vector3(0f, 0.72f, -0.01f), "", 0.15f, Color.white, TextAnchor.MiddleCenter);
+            addressStatus = Label("Status", p, new Vector3(0f, 0.48f, 0f), "", 0.06f, TextDim, TextAnchor.MiddleCenter);
+
+            // keypad on the left
+            string[] keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", T("key.del") };
+            var keySize = new Vector2(0.44f, 0.25f);
+            for (int i = 0; i < keys.Length; i++)
+            {
+                float x = -1.05f + 0.5f * (i % 3);
+                float y = 0.22f - 0.3f * (i / 3);
+                string key = keys[i];
+                bool del = i == keys.Length - 1;
+                Button("Key " + key, p, new Vector3(x, y, 0f), keySize, key, 0.12f, false,
+                       del ? (Action)Backspace : delegate { TypeKey(key[0]); });
+            }
+
+            // helpers on the right
+            var side = new Vector2(1.0f, 0.25f);
+            Button("This PC Button", p, new Vector3(0.88f, 0.22f, 0f), side, T("addr.thisPc"), 0.08f, false,
+                   delegate { SetEditHost(MenuSettings.ThisComputer); });
+            Button("Clear Button", p, new Vector3(0.88f, -0.08f, 0f), side, T("addr.clear"), 0.08f, false,
+                   delegate { SetEditHost(""); });
+            Button("Test Button", p, new Vector3(0.88f, -0.38f, 0f), side, T("addr.test"), 0.08f, false, TestAddress);
+
+            Button("Save Button", p, new Vector3(-0.6f, -1.02f, 0f), new Vector2(1.05f, 0.24f), T("addr.save"), 0.09f, true, SaveAddress);
+            Button("Cancel Button", p, new Vector3(0.6f, -1.02f, 0f), new Vector2(1.05f, 0.24f), T("addr.cancel"), 0.09f, false, CloseAddressEditor);
+            Label("Keys", p, new Vector3(0f, -1.3f, 0f), T("addr.keys"), 0.05f, TextDim, TextAnchor.MiddleCenter);
+
+            addressPage.SetActive(false);
+        }
+
+        void OpenAddressEditor()
+        {
+            editingAddress = true;
+            StopProbe();
+            if (settingsPage != null) settingsPage.SetActive(false);
+            if (addressPage != null) addressPage.SetActive(true);
+            hovered = null;
+            SetEditHost(MenuSettings.SimHost);
+        }
+
+        void CloseAddressEditor()
+        {
+            editingAddress = false;
+            StopProbe();
+            if (addressPage != null) addressPage.SetActive(false);
+            if (settingsPage != null) settingsPage.SetActive(true);
+            hovered = null;
+            RefreshSettings();
+        }
+
+        void SaveAddress()
+        {
+            if (!MenuSettings.IsValidAddress(editHost))
+            {
+                ShowAddressStatus(T("addr.invalid"), new Color(1f, 0.45f, 0.4f));
+                return;
+            }
+            MenuSettings.SimHost = editHost;
+            MenuSettings.Save();
+            CloseAddressEditor();
+        }
+
+        void SetEditHost(string h)
+        {
+            editHost = h ?? "";
+            StopProbe();
+            ShowAddressStatus("", TextDim);
+            ShowEditHost();
+        }
+
+        /// <summary>Add a digit or a dot, keeping it on the way to a real address (4 numbers of up to 3 digits, 0-255).</summary>
+        void TypeKey(char c)
+        {
+            string next = editHost + c;
+            string[] parts = next.Split('.');
+            if (parts.Length > 4) return;
+            if (c == '.' && (editHost.Length == 0 || editHost.EndsWith("."))) return;
+            string last = parts[parts.Length - 1];
+            if (last.Length > 3) return;
+            int n;
+            if (last.Length > 0 && (!int.TryParse(last, out n) || n > 255)) return;
+            editHost = next;
+            StopProbe();
+            ShowAddressStatus("", TextDim);
+            ShowEditHost();
+        }
+
+        void Backspace()
+        {
+            if (editHost.Length == 0) return;
+            editHost = editHost.Substring(0, editHost.Length - 1);
+            StopProbe();
+            ShowAddressStatus("", TextDim);
+            ShowEditHost();
+        }
+
+        void ShowEditHost()
+        {
+            if (addressText == null) return;
+            bool blink = Mathf.Repeat(Time.unscaledTime, 1f) < 0.55f;
+            string shown = editHost.Length > 0 ? editHost : "<color=#56657A>192.168.1.42</color>";
+            addressText.text = shown + (blink ? "<color=#4DD0FF>_</color>" : " ") +
+                               "<color=#7F93AA>  : " + MenuSettings.SimPort + "</color>";
+        }
+
+        void ShowAddressStatus(string text, Color color)
+        {
+            if (addressStatus == null) return;
+            addressStatus.text = text;
+            addressStatus.color = color;
+        }
+
+        /// <summary>Call the address and wait a few seconds for the simulator's hello.</summary>
+        void TestAddress()
+        {
+            if (!MenuSettings.IsValidAddress(editHost))
+            {
+                ShowAddressStatus(T("addr.invalid"), new Color(1f, 0.45f, 0.4f));
+                return;
+            }
+            StopProbe();
+            probeHost = editHost;
+            probe = new TcpFeedClient { Host = probeHost, Port = MenuSettings.SimPort, SendStatus = false };
+            probe.Start();
+            probeEnds = Time.realtimeSinceStartupAsDouble + 4.0;
+            ShowAddressStatus(string.Format(T("addr.testing"), probeHost), Amber);
+        }
+
+        void UpdateProbe()
+        {
+            if (probe == null) return;
+            string hello = probe.Hello;
+            if (!string.IsNullOrEmpty(hello))
+            {
+                string problem = probe.SchemaProblem;
+                if (problem != null) ShowAddressStatus(string.Format(T("addr.wrongVersion"), HelloField(hello, "schema")), new Color(1f, 0.45f, 0.4f));
+                else ShowAddressStatus(string.Format(T("addr.found"), HelloField(hello, "source") ?? probeHost), new Color(0.49f, 0.99f, 0.6f));
+                StopProbe();
+            }
+            else if (Time.realtimeSinceStartupAsDouble > probeEnds)
+            {
+                ShowAddressStatus(T("addr.noAnswer"), new Color(1f, 0.45f, 0.4f));
+                StopProbe();
+            }
+        }
+
+        void StopProbe()
+        {
+            if (probe == null) return;
+            TcpFeedClient p = probe;
+            probe = null;
+            p.Stop();
+        }
+
+        /// <summary>A string field of the hello line (which the link keeps only the start of).</summary>
+        static string HelloField(string hello, string field)
+        {
+            string key = "\"" + field + "\":\"";
+            int i = hello.IndexOf(key, StringComparison.Ordinal);
+            if (i < 0) return null;
+            i += key.Length;
+            int j = hello.IndexOf('"', i);
+            return j > i ? hello.Substring(i, j - i) : null;
+        }
+
+        void AddressKeys()
+        {
+            for (int d = 0; d <= 9; d++)
+                if (InputShim.Down(KeyCode.Alpha0 + d)) TypeKey((char)('0' + d));
+            if (InputShim.Down(KeyCode.Period)) TypeKey('.');
+            if (InputShim.Down(KeyCode.Backspace)) Backspace();
+            if (InputShim.Down(KeyCode.Return)) SaveAddress();
+            else if (InputShim.Down(KeyCode.Escape)) CloseAddressEditor();
         }
 
         void BuildInfoScreen()
@@ -773,10 +986,18 @@ namespace Eosat1
         {
             if (settingButtons[0] != null) settingButtons[0].Label.text = MenuText.LanguageName;
             if (settingButtons[1] != null) settingButtons[1].Label.text = FeedLabel();
-            if (settingButtons[2] != null) settingButtons[2].Label.text = MenuSettings.SpeedLabel;
-            if (settingButtons[3] != null) settingButtons[3].Label.text = T(MenuSettings.ShowInfoPanel ? "val.shown" : "val.hidden");
-            if (settingButtons[4] != null) settingButtons[4].Label.text = T(MenuSettings.ShowHints ? "val.shown" : "val.hidden");
-            if (settingButtons[5] != null) settingButtons[5].Label.text = MenuSettings.SnapTurnDegrees.ToString("0", Inv) + "\u00b0";
+            bool live = MenuSettings.Feed == FeedKind.Tcp;
+            if (settingButtons[AddressRow] != null)
+            {
+                // the address is only for Live link: greyed out for Sandbox and Replay
+                settingButtons[AddressRow].Label.text = MenuSettings.SimHost;
+                settingButtons[AddressRow].Enabled = live;
+            }
+            if (addressNote != null) addressNote.text = T(live ? "note.address" : "note.addressOff");
+            if (settingButtons[3] != null) settingButtons[3].Label.text = MenuSettings.SpeedLabel;
+            if (settingButtons[4] != null) settingButtons[4].Label.text = T(MenuSettings.ShowInfoPanel ? "val.shown" : "val.hidden");
+            if (settingButtons[5] != null) settingButtons[5].Label.text = T(MenuSettings.ShowHints ? "val.shown" : "val.hidden");
+            if (settingButtons[6] != null) settingButtons[6].Label.text = MenuSettings.SnapTurnDegrees.ToString("0", Inv) + "\u00b0";
             if (feedDescription != null) feedDescription.text = FeedDescription();
             UpdateSlowDisplays();
         }
@@ -822,6 +1043,7 @@ namespace Eosat1
             hintOverride = T("hint.loading");
             if (goText != null) goText.text = "<color=#7CFC9A>" + T("status.go") + "</color>";
             MenuSettings.Save();
+            StopProbe();
             MenuSettings.LaunchedFromMenu = true;
 
             fadeTarget = 1f;
@@ -917,6 +1139,10 @@ namespace Eosat1
                     spinSpeed = 0f;
                     Play(tickClip);
                 }
+                else if (editingAddress)
+                {
+                    AddressKeys();
+                }
                 else if (InputShim.Down(KeyCode.Return))
                 {
                     Play(clickClip);
@@ -932,6 +1158,8 @@ namespace Eosat1
             orbitPhase += dt * 2f * Mathf.PI / SecondsPerMapOrbit;
             MoveMarker();
             UpdateGrab(PointerHeld(headset), hasRay, ray, dt);
+            if (editingAddress) ShowEditHost();   // the blinking cursor
+            UpdateProbe();
             MoveHologram(dt);
             if (Time.unscaledTime >= nextSlowRefresh)
             {
@@ -1237,6 +1465,25 @@ namespace Eosat1
             { "set.speed",     new[] { "TIME SPEED AT START", "VITESSE AU D\u00c9PART" } },
             { "set.info",      new[] { "INFO PANEL", "PANNEAU D\u2019INFOS" } },
             { "set.hints",     new[] { "CONTROL HINTS", "AIDE DES COMMANDES" } },
+            { "set.address",   new[] { "SIMULATOR ADDRESS", "ADRESSE DU SIMULATEUR" } },
+            { "note.address",  new[] { "Laptop running the simulator or vr_stub.py, port 8100", "Portable du simulateur ou de vr_stub.py, port 8100" } },
+            { "note.addressOff", new[] { "Only used by Live link", "Utilis\u00e9e seulement en direct" } },
+            { "addr.help",     new[] { "On that laptop, run ipconfig and read the IPv4 Address. Same Wi-Fi as the headset.",
+                                       "Sur ce portable, lancez ipconfig et lisez l\u2019adresse IPv4. M\u00eame Wi-Fi que le casque." } },
+            { "addr.thisPc",   new[] { "THIS PC", "CE PC" } },
+            { "addr.clear",    new[] { "CLEAR", "EFFACER" } },
+            { "addr.test",     new[] { "TEST", "TESTER" } },
+            { "addr.save",     new[] { "SAVE", "ENREGISTRER" } },
+            { "addr.cancel",   new[] { "CANCEL", "ANNULER" } },
+            { "key.del",       new[] { "DEL", "EFF" } },
+            { "addr.keys",     new[] { "Keyboard: type the numbers  |  Enter saves  |  Esc cancels",
+                                       "Clavier : tapez les chiffres  |  Entr\u00e9e enregistre  |  \u00c9chap annule" } },
+            { "addr.invalid",  new[] { "Not a full address yet, e.g. 192.168.1.42", "Adresse incompl\u00e8te, ex. 192.168.1.42" } },
+            { "addr.testing",  new[] { "Calling {0} : 8100 ...", "Appel de {0} : 8100 ..." } },
+            { "addr.found",    new[] { "Connected! Found: {0}", "Connect\u00e9 ! Trouv\u00e9 : {0}" } },
+            { "addr.wrongVersion", new[] { "It answered, but speaks {0}, not smo-vr/1", "Il r\u00e9pond, mais parle {0}, pas smo-vr/1" } },
+            { "addr.noAnswer", new[] { "No answer. Same Wi-Fi? Simulator running? Firewall open on 8100?",
+                                       "Pas de r\u00e9ponse. M\u00eame Wi-Fi ? Simulateur lanc\u00e9 ? Pare-feu ouvert (8100) ?" } },
             { "set.snap",      new[] { "SNAP TURN (HEADSET)", "ROTATION (CASQUE)" } },
             { "note.language", new[] { "Menu language", "Langue du menu" } },
             { "note.speed",    new[] { "Change it any time with - and = (or Y)", "Modifiable avec - et = (ou Y)" } },
