@@ -355,7 +355,7 @@ namespace Eosat1
                     break;
                 case FeedKind.Tcp:
                     TcpFeedClient l = a.Link;
-                    sb.Append("LIVE ").Append(a.tcpHost).Append(':').Append(a.tcpPort).Append("  ");
+                    sb.Append("LIVE ").Append(TcpFeedClient.Describe(a.tcpHost, a.tcpPort)).Append("  ");
                     if (l == null) sb.Append(Bad("stopped"));
                     else if (!l.Connected) sb.Append(Bad(s.Predicting ? "not connected - predicting" : "not connected"));
                     else if (s.Valid && s.DataAge > 2.5) sb.Append(Warn((s.Predicting ? "WEAK - predicting, " : "STALE ") + s.DataAge.ToString("0", Inv) + " s"));

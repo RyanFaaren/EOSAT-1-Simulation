@@ -482,6 +482,8 @@ namespace Eosat1
             Button("Clear Button", p, new Vector3(0.88f, -0.08f, 0f), side, T("addr.clear"), 0.08f, false,
                    delegate { SetEditHost(""); });
             Button("Test Button", p, new Vector3(0.88f, -0.38f, 0f), side, T("addr.test"), 0.08f, false, TestAddress);
+            Button("Cloud Button", p, new Vector3(0.88f, -0.68f, 0f), side, T("addr.cloud"), 0.08f, false,
+                   delegate { SetEditHost(MenuSettings.CloudAddress); });
 
             Button("Save Button", p, new Vector3(-0.6f, -1.02f, 0f), new Vector2(1.05f, 0.24f), T("addr.save"), 0.09f, true, SaveAddress);
             Button("Cancel Button", p, new Vector3(0.6f, -1.02f, 0f), new Vector2(1.05f, 0.24f), T("addr.cancel"), 0.09f, false, CloseAddressEditor);
@@ -512,7 +514,7 @@ namespace Eosat1
 
         void SaveAddress()
         {
-            if (!MenuSettings.IsValidAddress(editHost))
+            if (!MenuSettings.IsValidHost(editHost))
             {
                 ShowAddressStatus(T("addr.invalid"), new Color(1f, 0.45f, 0.4f));
                 return;
@@ -526,13 +528,14 @@ namespace Eosat1
         {
             editHost = h ?? "";
             StopProbe();
-            ShowAddressStatus("", TextDim);
+            ShowAddressStatus(TcpFeedClient.IsWebSocketAddress(editHost) ? T("addr.cloudNote") : "", TextDim);
             ShowEditHost();
         }
 
         /// <summary>Add a digit or a dot, keeping it on the way to a real address (4 numbers of up to 3 digits, 0-255).</summary>
         void TypeKey(char c)
         {
+            if (TcpFeedClient.IsWebSocketAddress(editHost)) editHost = "";   // typing replaces the cloud address
             string next = editHost + c;
             string[] parts = next.Split('.');
             if (parts.Length > 4) return;
@@ -550,7 +553,7 @@ namespace Eosat1
         void Backspace()
         {
             if (editHost.Length == 0) return;
-            editHost = editHost.Substring(0, editHost.Length - 1);
+            editHost = TcpFeedClient.IsWebSocketAddress(editHost) ? "" : editHost.Substring(0, editHost.Length - 1);
             StopProbe();
             ShowAddressStatus("", TextDim);
             ShowEditHost();
@@ -560,6 +563,12 @@ namespace Eosat1
         {
             if (addressText == null) return;
             bool blink = Mathf.Repeat(Time.unscaledTime, 1f) < 0.55f;
+            if (TcpFeedClient.IsWebSocketAddress(editHost))
+            {
+                // a cloud address: show where it goes, not a port
+                addressText.text = MenuSettings.HostLabel(editHost) + "<color=#7F93AA>  (" + editHost + ")</color>";
+                return;
+            }
             string shown = editHost.Length > 0 ? editHost : "<color=#56657A>192.168.1.42</color>";
             addressText.text = shown + (blink ? "<color=#4DD0FF>_</color>" : " ") +
                                "<color=#7F93AA>  : " + MenuSettings.SimPort + "</color>";
@@ -575,7 +584,7 @@ namespace Eosat1
         /// <summary>Call the address and wait a few seconds for the simulator's hello.</summary>
         void TestAddress()
         {
-            if (!MenuSettings.IsValidAddress(editHost))
+            if (!MenuSettings.IsValidHost(editHost))
             {
                 ShowAddressStatus(T("addr.invalid"), new Color(1f, 0.45f, 0.4f));
                 return;
@@ -584,8 +593,9 @@ namespace Eosat1
             probeHost = editHost;
             probe = new TcpFeedClient { Host = probeHost, Port = MenuSettings.SimPort, SendStatus = false };
             probe.Start();
-            probeEnds = Time.realtimeSinceStartupAsDouble + 4.0;
-            ShowAddressStatus(string.Format(T("addr.testing"), probeHost), Amber);
+            bool cloud = TcpFeedClient.IsWebSocketAddress(probeHost);
+            probeEnds = Time.realtimeSinceStartupAsDouble + (cloud ? 12.0 : 4.0);   // the internet is slower than the desk
+            ShowAddressStatus(string.Format(T("addr.testing"), cloud ? MenuSettings.HostLabel(probeHost) : TcpFeedClient.Describe(probeHost, MenuSettings.SimPort)), Amber);
         }
 
         void UpdateProbe()
@@ -601,7 +611,7 @@ namespace Eosat1
             }
             else if (Time.realtimeSinceStartupAsDouble > probeEnds)
             {
-                ShowAddressStatus(T("addr.noAnswer"), new Color(1f, 0.45f, 0.4f));
+                ShowAddressStatus(T(TcpFeedClient.IsWebSocketAddress(probeHost) ? "addr.noAnswerCloud" : "addr.noAnswer"), new Color(1f, 0.45f, 0.4f));
                 StopProbe();
             }
         }
@@ -990,7 +1000,7 @@ namespace Eosat1
             if (settingButtons[AddressRow] != null)
             {
                 // the address is only for Live link: greyed out for Sandbox and Replay
-                settingButtons[AddressRow].Label.text = MenuSettings.SimHost;
+                settingButtons[AddressRow].Label.text = MenuSettings.HostLabel(MenuSettings.SimHost);
                 settingButtons[AddressRow].Enabled = live;
             }
             if (addressNote != null) addressNote.text = T(live ? "note.address" : "note.addressOff");
@@ -1479,7 +1489,11 @@ namespace Eosat1
             { "addr.keys",     new[] { "Keyboard: type the numbers  |  Enter saves  |  Esc cancels",
                                        "Clavier : tapez les chiffres  |  Entr\u00e9e enregistre  |  \u00c9chap annule" } },
             { "addr.invalid",  new[] { "Not a full address yet, e.g. 192.168.1.42", "Adresse incompl\u00e8te, ex. 192.168.1.42" } },
-            { "addr.testing",  new[] { "Calling {0} : 8100 ...", "Appel de {0} : 8100 ..." } },
+            { "addr.testing",  new[] { "Calling {0} ...", "Appel de {0} ..." } },
+            { "addr.cloud",    new[] { "C2O CLOUD", "NUAGE C2O" } },
+            { "addr.cloudNote", new[] { "The course's simulator online: needs internet, no sign-in", "Le simulateur du cours en ligne : Internet requis, sans connexion" } },
+            { "addr.noAnswerCloud", new[] { "No answer from the cloud. Internet OK? It may be switched off; ask the prof.",
+                                            "Pas de r\u00e9ponse du nuage. Internet OK ? Il est peut-\u00eatre \u00e9teint : demandez au prof." } },
             { "addr.found",    new[] { "Connected! Found: {0}", "Connect\u00e9 ! Trouv\u00e9 : {0}" } },
             { "addr.wrongVersion", new[] { "It answered, but speaks {0}, not smo-vr/1", "Il r\u00e9pond, mais parle {0}, pas smo-vr/1" } },
             { "addr.noAnswer", new[] { "No answer. Same Wi-Fi? Simulator running? Firewall open on 8100?",

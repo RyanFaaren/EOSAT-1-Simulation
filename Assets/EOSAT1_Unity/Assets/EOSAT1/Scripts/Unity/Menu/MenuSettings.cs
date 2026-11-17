@@ -26,6 +26,8 @@ namespace Eosat1
         /// <summary>The simulator's TCP port (smo-vr/1).</summary>
         public const int SimPort = 8100;
         public const string ThisComputer = "127.0.0.1";
+        /// <summary>The course's simulator in the cloud (ICD smo-vr/1 issue 2): WebSocket, no sign-in, needs the internet.</summary>
+        public const string CloudAddress = "wss://ops.c2o.live/vr";
 
         /// <summary>
         /// The address of the laptop running the simulator or vr_stub.py, used by Live link.
@@ -36,9 +38,30 @@ namespace Eosat1
             get
             {
                 string h = PlayerPrefs.GetString(KeyHost, ThisComputer);
-                return IsValidAddress(h) ? h : ThisComputer;
+                return IsValidHost(h) ? h : ThisComputer;
             }
-            set { if (IsValidAddress(value)) PlayerPrefs.SetString(KeyHost, value); }
+            set { if (IsValidHost(value)) PlayerPrefs.SetString(KeyHost, value); }
+        }
+
+        /// <summary>An IPv4 address, or a ws:// / wss:// address such as the cloud one.</summary>
+        public static bool IsValidHost(string s)
+        {
+            if (IsValidAddress(s)) return true;
+            if (!Eosat1.Core.TcpFeedClient.IsWebSocketAddress(s) || s.Length > 200 || s.IndexOf(' ') >= 0) return false;
+            System.Uri u;
+            return System.Uri.TryCreate(s, System.UriKind.Absolute, out u) && !string.IsNullOrEmpty(u.Host);
+        }
+
+        /// <summary>Short name for the settings row: the IP, or "C2O CLOUD".</summary>
+        public static string HostLabel(string h)
+        {
+            if (h == CloudAddress) return "C2O CLOUD";
+            if (Eosat1.Core.TcpFeedClient.IsWebSocketAddress(h))
+            {
+                System.Uri u;
+                return System.Uri.TryCreate(h, System.UriKind.Absolute, out u) ? u.Host : h;
+            }
+            return h;
         }
 
         /// <summary>A whole IPv4 address: four numbers 0-255 with dots, e.g. 192.168.1.42.</summary>

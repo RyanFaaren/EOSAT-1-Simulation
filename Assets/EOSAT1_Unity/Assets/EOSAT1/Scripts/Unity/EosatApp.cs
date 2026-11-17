@@ -158,7 +158,7 @@ namespace Eosat1
             StopLink();
             tcp = new TcpFeedClient { Host = tcpHost, Port = tcpPort, SendStatus = sendStatus };
             tcp.Start();
-            Say("Live link: connecting to " + tcpHost + ":" + tcpPort);
+            Say("Live link: connecting to " + TcpFeedClient.Describe(tcpHost, tcpPort));
         }
 
         void StopLink()

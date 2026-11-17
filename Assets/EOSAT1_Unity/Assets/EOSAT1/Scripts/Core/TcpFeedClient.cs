@@ -1,4 +1,6 @@
-// EOSAT-1 VR - the live link: TCP, one JSON object per line (simulator port 8100).
+// EOSAT-1 VR - the live link: TCP, one JSON object per line (simulator port 8100),
+// or a WebSocket, one JSON object per message, when Host is a ws:// or wss:// address
+// (the course's cloud simulator: wss://ops.c2o.live/vr, ICD smo-vr/1 issue 2 §2).
 //
 // All socket work happens on a background thread ("never read the socket on the
 // render thread"). Parsed frames go into a thread-safe queue that the main thread
@@ -18,6 +20,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using System.Net.WebSockets;
+using System.Threading.Tasks;
 using System.Text;
 using System.Threading;
 
@@ -51,6 +55,21 @@ namespace Eosat1.Core
         Thread thread;
         volatile bool stop;
         volatile Socket socket;
+        volatile ClientWebSocket webSocket;
+
+        /// <summary>True for a ws:// or wss:// address (a WebSocket, e.g. the course's cloud simulator).</summary>
+        public static bool IsWebSocketAddress(string host)
+        {
+            return !string.IsNullOrEmpty(host) &&
+                   (host.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) ||
+                    host.StartsWith("wss://", StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>How to show an address: "host:port" for TCP, the URL itself for a WebSocket.</summary>
+        public static string Describe(string host, int port)
+        {
+            return IsWebSocketAddress(host) ? host : host + ":" + port.ToString(CultureInfo.InvariantCulture);
+        }
 
         // statistics: written by the network thread, read by the main thread
         long linesReceived, framesParsed, parseErrors, bytesReceived, connects, lastSeq = -1;
@@ -92,6 +111,12 @@ namespace Eosat1.Core
         public void Stop()
         {
             stop = true;
+            ClientWebSocket w = webSocket;
+            if (w != null)
+            {
+                try { w.Abort(); }
+                catch (Exception) { }
+            }
             Socket s = socket;
             if (s != null)
             {
@@ -139,6 +164,11 @@ namespace Eosat1.Core
 
         void Run()
         {
+            if (IsWebSocketAddress(Host))
+            {
+                RunWebSocket();
+                return;
+            }
             var buffer = new byte[16384];
             var line = new byte[4096];
             int lineLen = 0;
@@ -160,7 +190,7 @@ namespace Eosat1.Core
                     Interlocked.Increment(ref connects);
                     lineLen = 0;
                     discarding = false;
-                    Log("connected to " + Host + ":" + Port);
+                    Log("connected to " + Describe(Host, Port));
                     double nextStatus = MonoClock.Now + StatusIntervalS;
                     while (!stop)
                     {
@@ -223,6 +253,121 @@ namespace Eosat1.Core
                 }
                 double until = MonoClock.Now + ReconnectDelayS;
                 while (!stop && MonoClock.Now < until) Thread.Sleep(50);
+            }
+        }
+
+        /// <summary>
+        /// The WebSocket link, on the same background thread: one JSON object per text message,
+        /// the status line sent back the same way, reconnecting every ReconnectDelayS when it drops.
+        /// </summary>
+        void RunWebSocket()
+        {
+            var buffer = new byte[16384];
+            var msg = new byte[4096];
+            while (!stop)
+            {
+                ClientWebSocket ws = null;
+                try
+                {
+                    ws = new ClientWebSocket();
+                    ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
+                    webSocket = ws;
+                    // the cloud is further away than a laptop on the desk: DNS and TLS take a moment
+                    using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(ConnectTimeoutS, 10.0))))
+                        ws.ConnectAsync(new Uri(Host), cts.Token).GetAwaiter().GetResult();
+                    connected = true;
+                    Interlocked.Increment(ref connects);
+                    Log("connected to " + Host);
+                    double nextStatus = MonoClock.Now + StatusIntervalS;
+                    int msgLen = 0;
+                    bool discarding = false;
+                    Task<WebSocketReceiveResult> pending = null;
+                    while (!stop && ws.State == WebSocketState.Open)
+                    {
+                        if (pending == null) pending = ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                        if (pending.Wait(100))
+                        {
+                            WebSocketReceiveResult r = pending.Result;
+                            pending = null;
+                            if (r.MessageType == WebSocketMessageType.Close)
+                            {
+                                Log("the simulator closed the connection");
+                                break;
+                            }
+                            Interlocked.Add(ref bytesReceived, r.Count);
+                            if (!discarding)
+                            {
+                                if (msgLen + r.Count > MaxLineBytes)
+                                {
+                                    discarding = true;
+                                    Interlocked.Increment(ref parseErrors);
+                                    lastParseOk = false;
+                                    Log("dropped an over-long message");
+                                }
+                                else
+                                {
+                                    if (msgLen + r.Count > msg.Length)
+                                        Array.Resize(ref msg, Math.Min(MaxLineBytes, Math.Max(msg.Length * 2, msgLen + r.Count)));
+                                    Buffer.BlockCopy(buffer, 0, msg, msgLen, r.Count);
+                                    msgLen += r.Count;
+                                }
+                            }
+                            if (r.EndOfMessage)
+                            {
+                                if (!discarding) HandleMessage(msg, msgLen);
+                                msgLen = 0;
+                                discarding = false;
+                            }
+                        }
+                        if (SendStatus && MonoClock.Now >= nextStatus)
+                        {
+                            byte[] data = Encoding.UTF8.GetBytes(BuildStatusLine().TrimEnd('\n'));
+                            ws.SendAsync(new ArraySegment<byte>(data), WebSocketMessageType.Text, true, CancellationToken.None)
+                              .Wait(TimeSpan.FromSeconds(2));
+                            nextStatus = MonoClock.Now + StatusIntervalS;
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    if (!stop)
+                    {
+                        Exception inner = e;
+                        while (inner.InnerException != null) inner = inner.InnerException;
+                        Log("link: " + inner.Message);
+                    }
+                }
+                finally
+                {
+                    connected = false;
+                    webSocket = null;
+                    if (ws != null)
+                    {
+                        try { ws.Abort(); ws.Dispose(); }
+                        catch (Exception) { }
+                    }
+                }
+                double until = MonoClock.Now + ReconnectDelayS;
+                while (!stop && MonoClock.Now < until) Thread.Sleep(50);
+            }
+        }
+
+        /// <summary>One WebSocket message: normally one JSON object, but split on newlines just in case.</summary>
+        void HandleMessage(byte[] bytes, int len)
+        {
+            int start = 0;
+            for (int k = 0; k <= len; k++)
+            {
+                if (k == len || bytes[k] == (byte)'\n')
+                {
+                    if (k > start)
+                    {
+                        var part = new byte[k - start];
+                        Buffer.BlockCopy(bytes, start, part, 0, part.Length);
+                        HandleLine(part, part.Length);
+                    }
+                    start = k + 1;
+                }
             }
         }
 
@@ -299,16 +444,23 @@ namespace Eosat1.Core
 
         void SendStatusLine(Socket s)
         {
+            byte[] data = Encoding.UTF8.GetBytes(BuildStatusLine());
+            s.Send(data, 0, data.Length, SocketFlags.None);
+        }
+
+        string BuildStatusLine()
+        {
             int word = ComputeStatusWord();
             lastStatusWord = word;
-            var sb = new StringBuilder(200);
+            string seq = Interlocked.Read(ref lastSeq).ToString(CultureInfo.InvariantCulture);
+            var sb = new StringBuilder(220);
             sb.Append("{\"type\":\"status\",\"status_word\":").Append(word.ToString(CultureInfo.InvariantCulture));
-            sb.Append(",\"last_seq\":").Append(Interlocked.Read(ref lastSeq).ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"seq_ack\":").Append(seq);   // the ICD's name: the console shows how many frames behind we are
+            sb.Append(",\"last_seq\":").Append(seq);
             sb.Append(",\"frames\":").Append(Interlocked.Read(ref framesParsed).ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"parse_errors\":").Append(Interlocked.Read(ref parseErrors).ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"app\":\"").Append(AppName).Append("\"}\n");
-            byte[] data = Encoding.UTF8.GetBytes(sb.ToString());
-            s.Send(data, 0, data.Length, SocketFlags.None);
+            return sb.ToString();
         }
     }
 }
