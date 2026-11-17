@@ -26,12 +26,13 @@ namespace Eosat1
         public const string BadHex = "#FF6B6B";
 
         public static GUIStyle Panel, Header, Text, Dim, Small, SmallDim, Button, ButtonHover, ButtonOn, ButtonOnHover, Toast, Chip;
+        public static GUIStyle Wrap, Title, Key, ButtonText;
 
         static Texture2D panelTex, buttonTex, buttonHoverTex, buttonOnTex, buttonOnHoverTex, toastTex, chipTex, softDot;
         static int builtForHeight = -1;
 
         /// <summary>Base text height in pixels; everything scales with the window.</summary>
-        public static float Unit { get { return Mathf.Max(12f, Screen.height / 58f); } }
+        public static float Unit { get { return Mathf.Max(13f, Screen.height / 48f); } }
 
         public static void Ensure()
         {
@@ -88,6 +89,106 @@ namespace Eosat1
             Chip.fontStyle = FontStyle.Bold;
             Chip.normal.textColor = Accent;
             Chip.padding = new RectOffset(pad, pad, 2, 2);
+
+            // a paragraph (tooltips, help), a big heading, and the small key name on a button
+            Wrap = Plain(Mathf.RoundToInt(u * 0.92f), TextBright, TextAnchor.UpperLeft, false);
+            Wrap.wordWrap = true;
+            Title = Plain(Mathf.RoundToInt(u * 1.25f), Accent, TextAnchor.MiddleCenter, true);
+            Key = Background(chipTex, 9);
+            Key.alignment = TextAnchor.MiddleCenter;
+            Key.fontSize = Mathf.RoundToInt(u * 0.74f);
+            Key.fontStyle = FontStyle.Bold;
+            Key.normal.textColor = new Color(0.78f, 0.9f, 1f, 1f);
+            ButtonText = Plain(Mathf.RoundToInt(u * 0.92f), Color.white, TextAnchor.MiddleLeft, false);
+            ButtonText.clipping = TextClipping.Clip;
+        }
+
+        // ------------------------------------------------------------------ shared between the on-screen panels
+        // Each panel reports its rectangle while it draws, so a mouse drag that starts on a
+        // panel does not also swing the camera. Rectangles are in OnGUI coordinates.
+        static readonly System.Collections.Generic.List<Rect> blocksNow = new System.Collections.Generic.List<Rect>();
+        static readonly System.Collections.Generic.List<Rect> blocksBefore = new System.Collections.Generic.List<Rect>();
+        static int blockFrame = -100, modalFrame = -100, tipFrame = -100;
+        static string tipText = "";
+        static Rect tipAnchor;
+
+        /// <summary>Call while drawing a panel: the mouse over this rectangle belongs to the display, not the camera.</summary>
+        public static void Block(Rect r)
+        {
+            int f = Time.frameCount;
+            if (f != blockFrame)
+            {
+                blocksBefore.Clear();
+                blocksBefore.AddRange(blocksNow);
+                blocksNow.Clear();
+                blockFrame = f;
+            }
+            blocksNow.Add(r);
+        }
+
+        /// <summary>Is this point (OnGUI coordinates) on one of the panels drawn in the last frames?</summary>
+        public static bool OverUi(Vector2 p)
+        {
+            if (Time.frameCount - blockFrame > 3) return false;
+            for (int i = 0; i < blocksNow.Count; i++) if (blocksNow[i].Contains(p)) return true;
+            for (int i = 0; i < blocksBefore.Count; i++) if (blocksBefore[i].Contains(p)) return true;
+            return false;
+        }
+
+        /// <summary>Call every frame while a full-screen card (the help) is open; it takes all clicks.</summary>
+        public static void MarkModal()
+        {
+            modalFrame = Time.frameCount;
+        }
+
+        public static bool ModalActive { get { return Time.frameCount - modalFrame <= 1; } }
+
+        /// <summary>True when the mouse should not move the camera: over a panel, or a card is open.</summary>
+        public static bool PointerBlocked { get { return ModalActive || OverUi(Mouse()); } }
+
+        /// <summary>Call while drawing a button the mouse is over: the sentence that explains it.</summary>
+        public static void SetTip(Rect anchor, string text)
+        {
+            tipAnchor = anchor;
+            tipText = text;
+            tipFrame = Time.frameCount;
+        }
+
+        public static bool TryGetTip(out Rect anchor, out string text)
+        {
+            anchor = tipAnchor;
+            text = tipText;
+            return Time.frameCount - tipFrame <= 1 && !string.IsNullOrEmpty(tipText);
+        }
+
+        /// <summary>A button with its key shown at the right edge. Call during Repaint.</summary>
+        public static void DrawButton(Rect r, string label, string key, bool on, bool hover)
+        {
+            GUIStyle st = on ? (hover ? ButtonOnHover : ButtonOn) : (hover ? ButtonHover : Button);
+            if (string.IsNullOrEmpty(key))
+            {
+                GUI.Box(r, label, st);
+                return;
+            }
+            var kc = new GUIContent(key);
+            float kw = Key.CalcSize(kc).x + Unit * 0.5f;
+            float kh = Mathf.Round(Unit * 1.15f);
+            float inset = Mathf.Round(Unit * 0.45f);
+            GUI.Box(r, GUIContent.none, st);
+            // the words sit in what is left of the button once the key has its place
+            Color old = GUI.contentColor;
+            GUI.contentColor = st.normal.textColor;
+            GUI.Label(new Rect(r.x + inset, r.y, r.width - kw - inset * 2.5f, r.height), label, ButtonText);
+            GUI.contentColor = old;
+            GUI.Box(new Rect(r.xMax - kw - inset, r.y + (r.height - kh) * 0.5f, kw, kh), kc, Key);
+        }
+
+        /// <summary>How wide DrawButton needs to be for this label and key.</summary>
+        public static float ButtonWidth(string label, string key)
+        {
+            float w = ButtonText.CalcSize(new GUIContent(label)).x + Unit * 1.4f;
+            if (!string.IsNullOrEmpty(key)) w += Key.CalcSize(new GUIContent(key)).x + Unit * 1.1f;
+            return Mathf.Ceil(w);
         }
 
         static GUIStyle Background(Texture2D tex, int slice)
