@@ -35,6 +35,7 @@ namespace Eosat1
 
         float yaw, pitch;
         int view;
+        bool dragging;   // a drag that began on the picture, not on a panel or button
 
         // whole-Earth view: the camera orbits the Earth globe instead of the spacecraft
         bool overview;
@@ -74,10 +75,13 @@ namespace Eosat1
             // camera (the headset owns the camera when one is active)
             if (!UnityEngine.XR.XRSettings.isDeviceActive && cameraTransform != null && target != null)
             {
-                float scroll = WheelBusy ? 0f : InputShim.Scroll();
+                bool blocked = HudStyle.PointerBlocked;
+                float scroll = WheelBusy || blocked ? 0f : InputShim.Scroll();
+                if (InputShim.MouseDown(0) || InputShim.MouseDown(1)) dragging = !blocked;
+                else if (!InputShim.MouseHeld(0) && !InputShim.MouseHeld(1)) dragging = false;
                 if (overview)
                 {
-                    if (InputShim.MouseHeld(0) || InputShim.MouseHeld(1))
+                    if (dragging)
                     {
                         Vector2 d = InputShim.MouseDelta();
                         overviewYaw += d.x * degreesPerPixel;
@@ -92,7 +96,7 @@ namespace Eosat1
                 }
                 else
                 {
-                if (InputShim.MouseHeld(0) || InputShim.MouseHeld(1))
+                if (dragging)
                 {
                     Vector2 d = InputShim.MouseDelta();
                     yaw += d.x * degreesPerPixel;
@@ -111,14 +115,15 @@ namespace Eosat1
             }
 
             // back to the main menu (when the menu scene is in the build list)
-            if (InputShim.Down(KeyCode.Escape) && Application.CanStreamedLevelBeLoaded(MenuSettings.MenuSceneName))
+            if (InputShim.Down(KeyCode.Escape) && DesktopHud.EscapeFrame != Time.frameCount
+                && Application.CanStreamedLevelBeLoaded(MenuSettings.MenuSceneName))
             {
                 UnityEngine.SceneManagement.SceneManager.LoadScene(MenuSettings.MenuSceneName);
                 return;
             }
 
             // keyboard shortcuts work with or without a headset (instructor at the PC)
-            if (app == null) return;
+            if (app == null || HudStyle.ModalActive) return;   // the help card is open: keys wait
             bool shift = InputShim.Held(KeyCode.LeftShift) || InputShim.Held(KeyCode.RightShift);
 
             // time
@@ -147,7 +152,7 @@ namespace Eosat1
             if (InputShim.Down(KeyCode.B)) app.ToggleBoresight();
             if (InputShim.Down(KeyCode.L)) app.ToggleViewFrame();
             if (InputShim.Down(KeyCode.M)) app.CycleFeed();
-            if ((InputShim.Down(KeyCode.H) || InputShim.Down(KeyCode.F1)) && infoPanel != null) infoPanel.Toggle();
+            if (InputShim.Down(KeyCode.H) && infoPanel != null) infoPanel.Toggle();   // F1 = help card, Tab = control bar (DesktopHud)
         }
     }
 }

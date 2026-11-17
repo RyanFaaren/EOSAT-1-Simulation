@@ -2,6 +2,7 @@
 // slides at a glance: Is it tumbling? Is the camera facing Earth? Are the wings in the
 // sun? Did the antenna come out? Plus where it is, the time, and the link health.
 // Desktop: drawn on screen (H toggles). Headset: a panel on the left controller (X toggles).
+// The buttons and the key list are DesktopHud's (desktop) and VrMenu's (headset).
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -18,6 +19,7 @@ namespace Eosat1
         public TextMesh worldText;
         public GameObject worldPanel;
         public bool showOnScreen = true;
+        [Tooltip("Desktop: show the control bar along the bottom of the screen (DesktopHud draws it; Tab toggles).")]
         public bool showHelp = true;
         public float refreshInterval = 0.25f;
 
@@ -31,8 +33,6 @@ namespace Eosat1
         string rowLabel = "";
         int rowStart = -1;
         string headerTime = "", headerChip = "";
-        List<string> helpLines, helpHeads;
-        int helpFlags = -1;
 
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -87,8 +87,7 @@ namespace Eosat1
             float margin = 12f;
 
             if (showOnScreen) DrawStatus(u, pad, margin);
-            if (showHelp) DrawHelp(u, pad, margin);
-            DrawLinkWarning();
+            DrawLinkWarning();   // the key list is gone: DesktopHud's control bar replaced it
 
             // the latest message, for a few seconds, fading out at the end
             float age = Time.unscaledTime - app.LastMessageTime;
@@ -158,6 +157,7 @@ namespace Eosat1
             float headH = Mathf.Round(u * 1.9f);
             var panel = new Rect(margin, margin, inner + pad * 2f, pad * 2f + headH + rowLabels.Count * rowH);
             HudStyle.DrawPanel(panel);
+            HudStyle.Block(panel);
 
             float x = panel.x + pad, y = panel.y + pad;
             GUI.Label(new Rect(x, y, titleSize.x, rowH), title, HudStyle.Header);
@@ -179,66 +179,6 @@ namespace Eosat1
                 GUI.Label(new Rect(x + labelW + gap, y, valueW, rowH), rowValues[i], HudStyle.Text);
                 y += rowH;
             }
-        }
-
-        /// <summary>The key list, bottom left: one line per group, like the menu's controls screen.</summary>
-        void DrawHelp(float u, float pad, float margin)
-        {
-            int flags = (app.CanCommand ? 1 : 0) | (app.CanControlTime ? 2 : 0);
-            if (helpLines == null || helpFlags != flags)
-            {
-                helpFlags = flags;
-                helpLines = new List<string>();
-                helpHeads = new List<string>();
-                helpHeads.Add("VIEW");
-                helpLines.Add(Keys("Drag", "orbit", "Wheel", "zoom", "V", "next view", "F", "first view", "C", "satellite camera",
-                                   "Z", "whole Earth", "O", "orbit path", "P", "panel axis"));
-                if (app.CanControlTime)
-                {
-                    helpHeads.Add("TIME");
-                    helpLines.Add(Keys("Space", "pause", "-  =", "slower / faster", "Left  Right", "jump 60 s", "Backspace", "restart"));
-                }
-                if (app.CanCommand)
-                {
-                    helpHeads.Add("SATELLITE");
-                    helpLines.Add(Keys("1  2", "solar panels", "3", "antenna", "4", "antenna jam", "5", "panel jam",
-                                       "6", "stow panels", "7", "stow antenna", "N", "face Earth",
-                                       "S", "face Sun", "R", "roll to image", "T", "tumble"));
-                }
-                helpHeads.Add("DISPLAY");
-                helpLines.Add(Keys("G", "body axes", "B", "boresight", "L", "view frame", "M", "data source", "H", "status panel", "Esc", "menu"));
-            }
-            float rowH = Mathf.Round(u * 1.35f);
-            float gap = Mathf.Round(u * 1.0f);
-            float headW = 0f, lineW = 0f;
-            for (int i = 0; i < helpLines.Count; i++)
-            {
-                headW = Mathf.Max(headW, HudStyle.Header.CalcSize(new GUIContent(helpHeads[i])).x);
-                lineW = Mathf.Max(lineW, HudStyle.SmallDim.CalcSize(new GUIContent(helpLines[i])).x);
-            }
-            float w = Mathf.Min(headW + gap + lineW + pad * 2f, Screen.width - margin * 2f);
-            float h = pad * 1.6f + helpLines.Count * rowH;
-            var panel = new Rect(margin, Screen.height - margin - h, w, h);
-            HudStyle.DrawPanel(panel);
-            float x = panel.x + pad, y = panel.y + pad * 0.8f;
-            for (int i = 0; i < helpLines.Count; i++)
-            {
-                GUI.Label(new Rect(x, y, headW, rowH), helpHeads[i], HudStyle.Header);
-                GUI.Label(new Rect(x + headW + gap, y, Mathf.Max(0f, panel.xMax - pad - (x + headW + gap)), rowH), helpLines[i], HudStyle.SmallDim);
-                y += rowH;
-            }
-        }
-
-        /// <summary>"key, what it does" pairs as one line: keys bright, descriptions dim.</summary>
-        static string Keys(params string[] pairs)
-        {
-            var b = new StringBuilder(256);
-            for (int i = 0; i + 1 < pairs.Length; i += 2)
-            {
-                if (i > 0) b.Append("     ");
-                b.Append("<b><color=").Append(HudStyle.BrightHex).Append('>').Append(pairs[i]).Append("</color></b>  ").Append(pairs[i + 1]);
-            }
-            return b.ToString();
         }
 
         // rows for the on-screen panel are cut out of the same text the headset panel shows

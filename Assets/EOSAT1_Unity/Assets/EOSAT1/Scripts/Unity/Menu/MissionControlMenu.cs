@@ -71,6 +71,7 @@ namespace Eosat1
 
         // rig
         Transform head, leftHand, rightHand;
+        VrRig vrRig;
         Camera cam;
         float lookYaw, lookPitch;      // small lean towards the mouse
         float viewYaw, targetYaw;      // which way you face on the desktop (0 = the menu)
@@ -286,6 +287,7 @@ namespace Eosat1
             rig.fallbackEyeHeight = eyeHeight;
             rig.verticalSpeed = 0f;
             rig.moveSpeed = 1.2f;
+            vrRig = rig;
         }
 
         static Transform BuildHand(string name, Transform parent, Material mat)
@@ -1272,6 +1274,8 @@ namespace Eosat1
                 ray = cam.ScreenPointToRay(InputShim.MousePosition());
                 return true;
             }
+            // the direction the controller is made to point along, when the runtime gives one
+            if (vrRig != null && vrRig.TryGetPointerRay(useRightHand, out ray)) return true;
             Transform hand = useRightHand ? rightHand : leftHand;
             InputDevice device = InputDevices.GetDeviceAtXRNode(useRightHand ? XRNode.RightHand : XRNode.LeftHand);
             if (hand != null && device.isValid)
@@ -1539,10 +1543,10 @@ namespace Eosat1
             { "ctl.dispDo",    new[] { "body axes\nboresight\nview frame\ndata source\ninfo panel",
                                        "axes\nvis\u00e9e cam\u00e9ra\nrep\u00e8re de vue\nsource\npanneau d\u2019infos" } },
             { "ctl.vrHead",    new[] { "IN THE SIMULATION", "DANS LA SIMULATION" } },
-            { "ctl.vrKeys",    new[] { "Left stick\nRight stick\nA\nB\nX\nY\nLeft grip\nMenu\nRight trigger\nLeft trigger",
-                                       "Stick gauche\nStick droit\nA\nB\nX\nY\nGrip gauche\nMenu\nG\u00e2chette dr.\nG\u00e2chette g." } },
-            { "ctl.vrDo",      new[] { "move\nturn / rise, sink\nnext wing / unjam\nantenna / unjam\ninfo panel\nspeed 1x / 10x / 60x\npause\nrestart\nbody axes\nboresight",
-                                       "avancer\ntourner / monter\npanneau / d\u00e9bloquer\nantenne / d\u00e9bloquer\npanneau d\u2019infos\nvitesse 1x/10x/60x\npause\nrecommencer\naxes\nvis\u00e9e cam\u00e9ra" } },
+            { "ctl.vrKeys",    new[] { "Left stick\nRight stick \u2190 \u2192\nRight stick \u2191 \u2193\nA\nB\nX\nY\nLeft grip\nMENU (left)\nTriggers",
+                                       "Stick gauche\nStick droit \u2190 \u2192\nStick droit \u2191 \u2193\nA\nB\nX\nY\nGrip gauche\nMENU (gauche)\nG\u00e2chettes" } },
+            { "ctl.vrDo",      new[] { "fly around\nturn\njetpack up / down\nnext panel / unjam\nantenna / unjam\nstatus panel\nspeed 1x / 10x / 60x\npause\nVR menu: all controls\nbody axes / camera line",
+                                       "voler\ntourner\njetpack haut / bas\npanneau / d\u00e9bloquer\nantenne / d\u00e9bloquer\npanneau d\u2019\u00e9tat\nvitesse 1x/10x/60x\npause\nmenu RV : commandes\naxes / vis\u00e9e cam\u00e9ra" } },
             { "ctl.note",      new[] { "Satellite keys work in Sandbox mode only.", "Touches du satellite : mode bac \u00e0 sable seulement." } },
             { "ctl.vrNote",    new[] { "In this menu: point a controller and pull the trigger.", "Dans ce menu : pointez une manette et appuyez sur la g\u00e2chette." } },
 

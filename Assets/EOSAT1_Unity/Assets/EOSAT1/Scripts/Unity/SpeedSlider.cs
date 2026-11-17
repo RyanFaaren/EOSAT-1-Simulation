@@ -120,8 +120,9 @@ namespace Eosat1
             float scale = Mathf.Max(0.75f, Screen.height / 1080f);
             float w = Mathf.Min(Screen.width * 0.4f, 620f * scale);
             float h = 78f * scale;
-            float helpHeight = app.infoPanel != null && app.infoPanel.showHelp ? Mathf.Max(11, Screen.height / 72) * 1.4f + 26f : 0f;
-            panelRect = new Rect(Screen.width - w - 10f, Screen.height - helpHeight - h - 12f, w, h);   // right edge, clear of the panels on the left
+            // just above the control bar (DesktopHud), on the right edge
+            float bottom = DesktopHud.TopOfControls > 0f ? DesktopHud.TopOfControls : Screen.height - 12f;
+            panelRect = new Rect(Screen.width - w - 10f, bottom - h, w, h);
             float pad = 22f * scale;
             trackRect = new Rect(panelRect.x + pad, panelRect.y + h * 0.5f - 3f * scale, w - 2f * pad, 6f * scale);
         }
@@ -163,6 +164,7 @@ namespace Eosat1
             Color on = enabledLook ? Accent : Greyed;
 
             Fill(panelRect, new Color(Back.r, Back.g, Back.b, 0.82f));
+            HudStyle.Block(panelRect);   // dragging here doesn't swing the camera
             Fill(new Rect(panelRect.x, panelRect.y, panelRect.width, 2f), new Color(on.r, on.g, on.b, 0.7f));
 
             labelStyle.normal.textColor = enabledLook ? new Color(0.93f, 0.96f, 1f) : Greyed;
@@ -200,6 +202,9 @@ namespace Eosat1
         Material fillMaterial, knobMaterial, textMaterial;
         Font font;
         bool vrDragging, prevGrip;
+
+        /// <summary>True while the right controller points at the VR speed bar or drags it, so the right grip's other job (VrRig: whole-Earth view) waits.</summary>
+        public static bool HoldsRightGrip;
 
         void BuildVrBar()
         {
@@ -271,6 +276,7 @@ namespace Eosat1
             if (desktopControls != null && !desktopControls.enabled) desktopControls.enabled = true;
             if (vrRoot == null || rig == null || rig.rightHand == null || !rig.rightHand.gameObject.activeInHierarchy)
             {
+                HoldsRightGrip = false;
                 if (vrLaser != null) vrLaser.enabled = false;
                 return;
             }
@@ -291,6 +297,7 @@ namespace Eosat1
 
             if (gripDown && onBar && CanChange) vrDragging = true;
             if (!grip) vrDragging = false;
+            HoldsRightGrip = onBar || vrDragging;
             if (vrDragging && hits) SetIndex(IndexAt((local.x + w * 0.5f) / w));
 
             if (vrLaser != null)

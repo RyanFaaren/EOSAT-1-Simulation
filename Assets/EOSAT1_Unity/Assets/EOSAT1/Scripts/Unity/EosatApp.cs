@@ -98,6 +98,8 @@ namespace Eosat1
             // extra views (satellite camera, whole Earth, orbit path): added here so scenes built
             // before they existed get them without a rebuild
             if (GetComponent<ViewDirector>() == null) gameObject.AddComponent<ViewDirector>();
+            // the control bar, tooltips and help card on the computer screen
+            if (GetComponent<DesktopHud>() == null) gameObject.AddComponent<DesktopHud>();
         }
 
         void Start()

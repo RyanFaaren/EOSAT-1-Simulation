@@ -14,8 +14,9 @@
 //                         the deployed solar array faces (body -X): the solar panels' version
 //                         of the camera boresight line. Aim it at the Sun for full power.
 //
-// Desktop also gets a button for each at the top right, styled like the main menu. Headset: right grip = whole Earth,
-// right stick click = camera screen, left stick click = orbit path.
+// Desktop also gets a button for each at the top right (the Views panel, with the body axes
+// and the camera line too); rest the mouse on one to read what it does. Headset: right grip =
+// whole Earth, right stick click = camera screen, left stick click = orbit path, or the VR menu.
 //
 // EosatApp adds this component by itself at start, and it builds what it needs (camera,
 // path, screen, marker) at run time, so an existing scene needs no rebuild.
@@ -73,7 +74,7 @@ namespace Eosat1
         Material vrScreenMaterial;
         Mesh vrScreenMesh, markerMesh;
         bool ready;
-        const int ButtonCount = 4;
+        const int ButtonCount = 6;
         readonly Rect[] buttonRects = new Rect[ButtonCount];
         Rect buttonPanel;
         readonly System.Collections.Generic.List<GameObject> panelAxes = new System.Collections.Generic.List<GameObject>();
@@ -362,6 +363,24 @@ namespace Eosat1
             app.Say(panelAxesVisible ? "Panel axis shown: the orange line points the way the deployed solar panels face" : "Panel axis hidden");
         }
 
+        public void ToggleBodyAxes()
+        {
+            if (!ready || satelliteView == null) return;
+            app.ToggleAxes();
+            app.Say(satelliteView.AxesVisible ? "Body axes shown: X = flight direction, Y = solar panel axis, Z = camera" : "Body axes hidden");
+        }
+
+        public void ToggleCameraLine()
+        {
+            if (!ready || satelliteView == null) return;
+            app.ToggleBoresight();
+            app.Say(satelliteView.BoresightVisible ? "Camera line shown: where the cameras look, and the patch of Earth they see" : "Camera line hidden");
+        }
+
+        public bool PathVisible { get { return pathVisible; } }
+        public bool PanelAxesVisible { get { return panelAxesVisible; } }
+        public bool SatCameraOn { get { return display != SatCameraDisplay.Off; } }
+
         public void ZoomSatCamera(float notches)
         {
             fieldOfViewDeg = Mathf.Clamp(fieldOfViewDeg * Mathf.Pow(0.85f, notches), TrueFieldOfViewDeg, maxFieldOfViewDeg);
@@ -383,11 +402,12 @@ namespace Eosat1
             if (!ready) return;
             bool headset = UnityEngine.XR.XRSettings.isDeviceActive;
 
-            if (InputShim.Down(KeyCode.Z)) ToggleOverview();
-            if (InputShim.Down(KeyCode.C)) CycleSatCamera();
-            if (InputShim.Down(KeyCode.O)) TogglePath();
-            if (InputShim.Down(KeyCode.P)) TogglePanelAxes();
-            if (display != SatCameraDisplay.Off)
+            bool keys = !HudStyle.ModalActive;   // the help card is open: keys wait
+            if (keys && InputShim.Down(KeyCode.Z)) ToggleOverview();
+            if (keys && InputShim.Down(KeyCode.C)) CycleSatCamera();
+            if (keys && InputShim.Down(KeyCode.O)) TogglePath();
+            if (keys && InputShim.Down(KeyCode.P)) TogglePanelAxes();
+            if (keys && display != SatCameraDisplay.Off)
             {
                 if (InputShim.Down(KeyCode.LeftBracket)) ZoomSatCamera(-1f);
                 if (InputShim.Down(KeyCode.RightBracket)) ZoomSatCamera(1f);
@@ -401,7 +421,7 @@ namespace Eosat1
             }
 
             // the buttons (desktop)
-            if (!headset && InputShim.MouseDown(0))
+            if (!headset && !HudStyle.ModalActive && InputShim.MouseDown(0))
             {
                 LayoutButtons();
                 Vector2 m = InputShim.MousePosition();
@@ -410,6 +430,8 @@ namespace Eosat1
                 else if (buttonRects[1].Contains(p)) ToggleOverview();
                 else if (buttonRects[2].Contains(p)) TogglePath();
                 else if (buttonRects[3].Contains(p)) TogglePanelAxes();
+                else if (buttonRects[4].Contains(p)) ToggleBodyAxes();
+                else if (buttonRects[5].Contains(p)) ToggleCameraLine();
             }
 
             UpdateSatCamera(headset);
@@ -487,8 +509,8 @@ namespace Eosat1
         {
             float u = HudStyle.Unit;
             float pad = Mathf.Round(u * 0.7f);
-            float bh = Mathf.Round(u * 2.1f);
-            float bw = Mathf.Round(u * 13.5f);
+            float bh = Mathf.Round(u * 2f);
+            float bw = Mathf.Round(u * 14.5f);
             float head = Mathf.Round(u * 1.7f);
             float gap = Mathf.Round(u * 0.45f);
             float x = Screen.width - 12f - pad - bw;
@@ -497,15 +519,21 @@ namespace Eosat1
             buttonPanel = new Rect(x - pad, 12f, bw + pad * 2f, pad * 2f + head + ButtonCount * bh + (ButtonCount - 1) * gap);
         }
 
-        static void DrawButton(Rect r, string label, string key, bool on, Vector2 mouse)
+        static readonly string[] Tips =
+        {
+            "See what the satellite's own cameras see. Click again for full screen, and once more to close.",
+            "Zoom right out: the Earth as a globe with the satellite going round it and the Moon at its true distance.",
+            "Show or hide the line the satellite follows around the Earth. Violet means it is in the Earth's shadow.",
+            "Show or hide the orange line that points the way the open solar panels face. Aim it at the Sun for full power.",
+            "Show or hide the three arrows fixed to the satellite: X = flight direction, Y = solar panel axis, Z = camera.",
+            "Show or hide the line along which the cameras look, and the patch of Earth they see.",
+        };
+
+        static void DrawButton(Rect r, string label, string key, bool on, Vector2 mouse, int tip)
         {
             bool hover = r.Contains(mouse);
-            GUIStyle st = on ? (hover ? HudStyle.ButtonOnHover : HudStyle.ButtonOn) : (hover ? HudStyle.ButtonHover : HudStyle.Button);
-            GUI.Box(r, label, st);
-            // the key that does the same, at the right edge
-            var kc = new GUIContent(key);
-            Vector2 ks = HudStyle.SmallDim.CalcSize(kc);
-            GUI.Label(new Rect(r.xMax - ks.x - HudStyle.Unit * 0.7f, r.y + (r.height - ks.y) * 0.5f, ks.x, ks.y), kc, HudStyle.SmallDim);
+            HudStyle.DrawButton(r, label, key, on, hover);
+            if (hover) HudStyle.SetTip(r, Tips[tip]);
         }
 
         void OnGUI()
@@ -560,15 +588,19 @@ namespace Eosat1
 
             // the buttons
             HudStyle.DrawPanel(buttonPanel);
+            HudStyle.Block(buttonPanel);
+            if (HudStyle.ModalActive) mouse = new Vector2(-1e6f, -1e6f);
             GUI.Label(new Rect(buttonRects[0].x, buttonPanel.y + Mathf.Round(u * 0.7f), buttonRects[0].width, u * 1.5f),
                       HudStyle.Spaced("VIEWS"), HudStyle.Header);
             bool overview = space.overview;
             string camText = display == SatCameraDisplay.Off ? "Satellite camera"
-                : (display == SatCameraDisplay.Inset ? "Satellite camera: corner" : "Satellite camera: full");
-            DrawButton(buttonRects[0], camText, "C", display != SatCameraDisplay.Off, mouse);
-            DrawButton(buttonRects[1], overview ? "Back to the satellite" : "Whole Earth", "Z", overview, mouse);
-            DrawButton(buttonRects[2], "Orbit path", "O", pathVisible, mouse);
-            DrawButton(buttonRects[3], "Panel axis", "P", panelAxesVisible, mouse);
+                : (display == SatCameraDisplay.Inset ? "Camera: corner" : "Camera: full screen");
+            DrawButton(buttonRects[0], camText, "C", display != SatCameraDisplay.Off, mouse, 0);
+            DrawButton(buttonRects[1], overview ? "Back to the satellite" : "Whole Earth", "Z", overview, mouse, 1);
+            DrawButton(buttonRects[2], "Orbit path", "O", pathVisible, mouse, 2);
+            DrawButton(buttonRects[3], "Solar panel line", "P", panelAxesVisible, mouse, 3);
+            DrawButton(buttonRects[4], "Body axes", "G", satelliteView != null && satelliteView.AxesVisible, mouse, 4);
+            DrawButton(buttonRects[5], "Camera line", "B", satelliteView != null && satelliteView.BoresightVisible, mouse, 5);
         }
     }
 }
