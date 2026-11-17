@@ -109,6 +109,29 @@ namespace Eosat1.Core
         /// <summary>Body rate magnitude in deg/s if the source provides it, else NaN.</summary>
         public double BodyRateDegS = double.NaN;
 
+        // smo-vr/1 extras: what the simulator (and the instructor / flight director) are doing.
+        // Text fields are null when the frame leaves them out; numbers are NaN.
+        /// <summary>Time acceleration (speed). 0 means the instructor froze the simulator.</summary>
+        public double Speed = double.NaN;
+        /// <summary>Mission elapsed time in seconds (met_s).</summary>
+        public double MetS = double.NaN;
+        /// <summary>attitude.aocs_mode: OFF SAFE_BOOT DETUMBLE COARSE_SUN NOMINAL FINE_POINT SLEW DESAT ECLIPSE INERTIAL.</summary>
+        public string AocsMode;
+        /// <summary>attitude.pointing: NADIR INERTIAL TARGET_TRACK SUN.</summary>
+        public string Pointing;
+        /// <summary>mission.sc_mode: SAFE NOMINAL SCIENCE EMERGENCY.</summary>
+        public string ScMode;
+        /// <summary>mission.phase: PRE_SEPARATION .. NOMINAL.</summary>
+        public string Phase;
+        public bool HasContact;
+        public bool InContact;
+        public string GroundStation;
+        /// <summary>deploy.antenna.deployed: the truth.</summary>
+        public bool HasAntennaTruth;
+        public bool AntennaDeployedTruth;
+        /// <summary>deploy.antenna.sensor: what the microswitch reports (UNKNOWN STOWED DEPLOYED JAMMED).</summary>
+        public string AntennaSensor;
+
         // set by the receiving side
         public double ArrivalWall;
         public bool JumpFromPrevious;
@@ -253,6 +276,33 @@ namespace Eosat1.Core
                 f.HasSada = true;
                 f.SadaDeg = sada;
             }
+
+            var antenna = MiniJson.Obj(deploy, "antenna");
+            bool truth;
+            if (MiniJson.TryBool(antenna, "deployed", out truth))
+            {
+                f.HasAntennaTruth = true;
+                f.AntennaDeployedTruth = truth;
+            }
+            f.AntennaSensor = Word(antenna, "sensor");
+
+            double num;
+            if (MiniJson.TryNumber(d, "speed", out num) && num >= 0 && num < 1e7) f.Speed = num;
+            if (MiniJson.TryNumber(d, "met_s", out num) && MathUtil.IsFinite(num)) f.MetS = num;
+            f.AocsMode = Word(att, "aocs_mode");
+            f.Pointing = Word(att, "pointing");
+
+            var mission = MiniJson.Obj(d, "mission");
+            f.ScMode = Word(mission, "sc_mode");
+            f.Phase = Word(mission, "phase");
+            bool contact;
+            if (MiniJson.TryBool(mission, "in_contact", out contact))
+            {
+                f.HasContact = true;
+                f.InContact = contact;
+            }
+            string gs;
+            if (MiniJson.TryString(mission, "ground_station", out gs) && gs != null) f.GroundStation = gs.Trim();
             return true;
         }
 
@@ -279,6 +329,16 @@ namespace Eosat1.Core
             string s = schema.Trim().ToLowerInvariant();
             int dot = s.IndexOf('.', Math.Max(0, s.IndexOf('/')));
             return dot >= 0 ? s.Substring(0, dot) : s;
+        }
+
+        /// <summary>An enum-like word, upper case, or null when absent or empty.</summary>
+        static string Word(Dictionary<string, object> o, string key)
+        {
+            string v;
+            if (!MiniJson.TryString(o, key, out v) || v == null) return null;
+            v = v.Trim().ToUpperInvariant();
+            if (v.Length == 0) return null;
+            return v.Length > 32 ? v.Substring(0, 32) : v;
         }
 
         static DeployInfo ReadDeploy(Dictionary<string, object> o)

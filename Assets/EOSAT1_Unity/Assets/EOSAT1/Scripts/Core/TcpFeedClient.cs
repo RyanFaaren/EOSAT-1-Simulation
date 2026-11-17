@@ -11,6 +11,8 @@
 //   bit 1 PARSE_OK   the last line parsed
 //   bit 2 RENDERING  the render loop ticked in the last second (a frozen app clears it)
 //   bit 3 DATA_FRESH newest state frame under 2 s old
+//   bit 4 DEPLOY_SHOWN the wings and antenna are drawn from the deploy fields (set by the app)
+//   bit 5 FRAMERATE_OK the render loop is holding its target frame rate (set by the app)
 //   bits 8-15        ours (see EosatApp.OwnStatusBits)
 // 15 = healthy. A crashed or frozen headset can't look healthy.
 // Field names of the status line are a best guess; check VR_INTERFACE_ICD.pdf.
@@ -40,6 +42,9 @@ namespace Eosat1.Core
     public sealed class TcpFeedClient : IDisposable
     {
         public const int StatusRxOk = 1, StatusParseOk = 2, StatusRendering = 4, StatusDataFresh = 8;
+        public const int StatusDeployShown = 0x10, StatusFramerateOk = 0x20;
+        /// <summary>Optional bits 4-5 of the status word, set by the main thread.</summary>
+        public volatile bool DeployShown, FramerateOk;
 
         public string Host = "127.0.0.1";
         public int Port = 8100;
@@ -148,6 +153,8 @@ namespace Eosat1.Core
             if (lastParseOk) word |= StatusParseOk;
             if (Age(now, Interlocked.Read(ref heartbeatTicks)) < 1.0) word |= StatusRendering;
             if (Age(now, Interlocked.Read(ref lastFrameTicks)) < 2.0) word |= StatusDataFresh;
+            if (DeployShown) word |= StatusDeployShown;
+            if (FramerateOk && (word & StatusRendering) != 0) word |= StatusFramerateOk;
             return word | (ownBits & 0xFF00);
         }
 

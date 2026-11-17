@@ -37,6 +37,31 @@ namespace Eosat1.Core
         public double SadaDeg;
         public double BodyRateDegS = double.NaN;
 
+        // what the simulator, instructor and flight director are doing (see StateFrame)
+        public double Speed = double.NaN;
+        public double MetS = double.NaN;
+        public string AocsMode, Pointing, ScMode, Phase, GroundStation, AntennaSensor;
+        public bool HasContact, InContact, HasAntennaTruth, AntennaDeployedTruth;
+        /// <summary>
+        /// The instructor froze the simulator: speed 0, or the server is repeating its last frame
+        /// (the link is alive but simulation time is standing still).
+        /// </summary>
+        public bool Frozen;
+
+        /// <summary>
+        /// The antenna's microswitch says something different from the truth (a failure the
+        /// instructor injected): e.g. sensor JAMMED/STOWED while the elements are out, or the reverse.
+        /// </summary>
+        public bool AntennaSensorDisagrees
+        {
+            get
+            {
+                if (!HasAntennaTruth || string.IsNullOrEmpty(AntennaSensor) || AntennaSensor == "UNKNOWN") return false;
+                bool sensorOut = AntennaSensor == "DEPLOYED";
+                return sensorOut != AntennaDeployedTruth;
+            }
+        }
+
         /// <summary>Changes whenever the picture should snap instead of animate (time jump, restart).</summary>
         public int Discontinuity;
         public bool Interpolating;
@@ -76,6 +101,24 @@ namespace Eosat1.Core
             HasSada = f.HasSada;
             SadaDeg = f.SadaDeg;
             BodyRateDegS = f.BodyRateDegS;
+            CopyMission(f);
+        }
+
+        /// <summary>The discrete fields (modes, contact, speed, antenna sensor): no interpolating these.</summary>
+        public void CopyMission(StateFrame f)
+        {
+            Speed = f.Speed;
+            MetS = f.MetS;
+            AocsMode = f.AocsMode;
+            Pointing = f.Pointing;
+            ScMode = f.ScMode;
+            Phase = f.Phase;
+            HasContact = f.HasContact;
+            InContact = f.InContact;
+            GroundStation = f.GroundStation;
+            HasAntennaTruth = f.HasAntennaTruth;
+            AntennaDeployedTruth = f.AntennaDeployedTruth;
+            AntennaSensor = f.AntennaSensor;
         }
     }
 
@@ -108,6 +151,15 @@ namespace Eosat1.Core
         public double LastArrival { get { return lastArrival; } }
         public int Count { get { return frames.Count; } }
         public double DisplayTime { get { return displayT; } }
+        /// <summary>The server is repeating its last frame (the instructor froze the simulation).</summary>
+        public bool Frozen { get { return frames.Count > 0 && IsFrozen(frames[frames.Count - 1]); } }
+
+        /// <summary>Speed 0 when the frame says its speed; otherwise, the server repeating itself.</summary>
+        bool IsFrozen(StateFrame newest)
+        {
+            if (!double.IsNaN(newest.Speed)) return newest.Speed == 0.0;
+            return keepalive;
+        }
         public StateFrame Newest { get { return frames.Count > 0 ? frames[frames.Count - 1] : null; } }
 
         public void Clear()
@@ -135,6 +187,7 @@ namespace Eosat1.Core
                     Duplicates++;
                     lastArrival = f.ArrivalWall;   // a repeat while frozen still proves the link is alive
                     keepalive = true;
+                    Refresh(last, f);
                     return;
                 }
                 if (dt < -BackwardJumpTolerance)
@@ -160,6 +213,7 @@ namespace Eosat1.Core
                         Duplicates++;
                         lastArrival = f.ArrivalWall;
                         keepalive = true;
+                        Refresh(last, f);
                     }
                     else OutOfOrder++;
                     return;
@@ -201,11 +255,45 @@ namespace Eosat1.Core
         }
 
         /// <summary>Fields a frame left out keep their previous values.</summary>
+        /// <summary>
+        /// A repeat of the same instant can still bring news: the simulator re-sends when a command
+        /// lands (a phase change), and while frozen the instructor can still inject a failure or the
+        /// flight director deploy something. Take its discrete fields into the frame already held.
+        /// </summary>
+        static void Refresh(StateFrame held, StateFrame f)
+        {
+            if (f.WingMinusY.Present) held.WingMinusY = f.WingMinusY;
+            if (f.WingPlusY.Present) held.WingPlusY = f.WingPlusY;
+            if (f.Antenna.Present) held.Antenna = f.Antenna;
+            if (!double.IsNaN(f.Speed)) held.Speed = f.Speed;
+            if (f.AocsMode != null) held.AocsMode = f.AocsMode;
+            if (f.Pointing != null) held.Pointing = f.Pointing;
+            if (f.ScMode != null) held.ScMode = f.ScMode;
+            if (f.Phase != null) held.Phase = f.Phase;
+            if (f.HasContact)
+            {
+                held.HasContact = true;
+                held.InContact = f.InContact;
+                held.GroundStation = f.GroundStation;
+            }
+            if (f.HasAntennaTruth)
+            {
+                held.HasAntennaTruth = true;
+                held.AntennaDeployedTruth = f.AntennaDeployedTruth;
+            }
+            if (f.AntennaSensor != null) held.AntennaSensor = f.AntennaSensor;
+        }
+
         static void CarryOver(StateFrame prev, StateFrame f)
         {
             if (!f.WingMinusY.Present) f.WingMinusY = prev.WingMinusY;
             if (!f.WingPlusY.Present) f.WingPlusY = prev.WingPlusY;
             if (!f.Antenna.Present) f.Antenna = prev.Antenna;
+            if (f.AocsMode == null) f.AocsMode = prev.AocsMode;
+            if (f.Pointing == null) f.Pointing = prev.Pointing;
+            if (f.ScMode == null) f.ScMode = prev.ScMode;
+            if (f.Phase == null) f.Phase = prev.Phase;
+            if (f.AntennaSensor == null) f.AntennaSensor = prev.AntennaSensor;
         }
 
         /// <summary>Advance the display clock by a wall-clock step.</summary>
@@ -284,7 +372,9 @@ namespace Eosat1.Core
                     s.InEclipse = b.InEclipse;
                     s.Seq = b.Seq;
                     s.Antenna = b.Antenna;
+                    s.CopyMission(b);
                 }
+                if (!double.IsNaN(a.MetS) && !double.IsNaN(b.MetS)) s.MetS = a.MetS + (b.MetS - a.MetS) * t;
                 if (!double.IsNaN(a.SunlitFraction) && !double.IsNaN(b.SunlitFraction))
                     s.SunlitFraction = a.SunlitFraction + (b.SunlitFraction - a.SunlitFraction) * t;
                 s.WingMinusY = LerpDeploy(a.WingMinusY, b.WingMinusY, t);
@@ -326,6 +416,8 @@ namespace Eosat1.Core
             s.Discontinuity = Discontinuity;
             s.DataAge = double.IsNaN(lastArrival) ? double.PositiveInfinity : Math.Max(0.0, wallNow - lastArrival);
             s.SimRate = simRate;
+            // frozen: the instructor set speed 0, or the server keeps repeating the last frame
+            s.Frozen = IsFrozen(frames[n - 1]);
             s.Predicting = false;
             s.PredictedS = 0;
             s.PredictionCapped = false;

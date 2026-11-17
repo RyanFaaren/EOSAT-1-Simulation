@@ -440,8 +440,18 @@ namespace Eosat1
                 if (space != null && satelliteView != null) space.FootprintEnabled = satelliteView.BoresightVisible;
             }
 
-            if (tcp != null) tcp.OwnStatusBits = OwnBits();
+            if (tcp != null)
+            {
+                tcp.OwnStatusBits = OwnBits();
+                // ICD optional bits: the deploy state is drawn, and the frame rate is holding up
+                tcp.DeployShown = satelliteView != null && satelliteView.isActiveAndEnabled && state.Valid;
+                smoothedDt += (Time.unscaledDeltaTime - smoothedDt) * 0.05f;
+                float target = UnityEngine.XR.XRSettings.isDeviceActive ? 72f : 30f;
+                tcp.FramerateOk = smoothedDt > 0f && 1f / smoothedDt >= target * 0.9f;
+            }
         }
+
+        float smoothedDt = 1f / 60f;
 
         void LateUpdate()
         {

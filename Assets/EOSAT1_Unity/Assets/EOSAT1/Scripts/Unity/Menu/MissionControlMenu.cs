@@ -92,7 +92,7 @@ namespace Eosat1
         readonly List<ScreenRect> screens = new List<ScreenRect>();
         readonly List<MenuButton> buttons = new List<MenuButton>();
         // settings rows: 0 language, 1 data source, 2 simulator address, 3 speed, 4 info panel, 5 hints, 6 snap
-        readonly MenuButton[] settingButtons = new MenuButton[7];
+        readonly MenuButton[] settingButtons = new MenuButton[8];
         const int AddressRow = 2;
         TextMesh addressNote;
 
@@ -402,8 +402,8 @@ namespace Eosat1
             Label("Header", s, new Vector3(0f, 1.24f, 0f), MenuKit.Spaced(T("set.title")), 0.15f, Color.white, TextAnchor.MiddleCenter);
             Divider(s, 1.08f, 2.8f);
 
-            string[] names = { T("set.language"), T("set.source"), T("set.address"), T("set.speed"), T("set.info"), T("set.hints"), T("set.snap") };
-            string[] notes = { T("note.language"), "", "", T("note.speed"), T("note.info"), T("note.hints"), T("note.snap") };
+            string[] names = { T("set.language"), T("set.source"), T("set.address"), T("set.speed"), T("set.info"), T("set.hints"), T("set.snap"), T("set.model") };
+            string[] notes = { T("note.language"), "", "", T("note.speed"), T("note.info"), T("note.hints"), T("note.snap"), T("note.model") };
             Action[] actions =
             {
                 null,   // language: rebuilds everything, handled below
@@ -413,10 +413,11 @@ namespace Eosat1
                 delegate { MenuSettings.ShowInfoPanel = !MenuSettings.ShowInfoPanel; },
                 delegate { MenuSettings.ShowHints = !MenuSettings.ShowHints; },
                 delegate { MenuSettings.NextSnap(); },
+                delegate { MenuSettings.UseCubeSat = !MenuSettings.UseCubeSat; },
             };
             for (int i = 0; i < names.Length; i++)
             {
-                float y = 0.86f - 0.28f * i;
+                float y = 0.86f - 0.25f * i;   // 8 rows, clear of the Back button
                 Label("Setting Name", s, new Vector3(-1.38f, y + 0.045f, 0f), names[i], 0.085f, TextBright, TextAnchor.MiddleLeft);
                 TextMesh note = Label("Setting Note", s, new Vector3(-1.38f, y - 0.07f, 0f), notes[i], 0.052f, ActionText, TextAnchor.MiddleLeft);
                 if (i == 1) feedDescription = note;
@@ -1010,6 +1011,7 @@ namespace Eosat1
             if (settingButtons[4] != null) settingButtons[4].Label.text = T(MenuSettings.ShowInfoPanel ? "val.shown" : "val.hidden");
             if (settingButtons[5] != null) settingButtons[5].Label.text = T(MenuSettings.ShowHints ? "val.shown" : "val.hidden");
             if (settingButtons[6] != null) settingButtons[6].Label.text = MenuSettings.SnapTurnDegrees.ToString("0", Inv) + "\u00b0";
+            if (settingButtons[7] != null) settingButtons[7].Label.text = T(MenuSettings.UseCubeSat ? "val.cubesat" : "val.eosat");
             if (feedDescription != null) feedDescription.text = FeedDescription();
             UpdateSlowDisplays();
         }
@@ -1509,6 +1511,10 @@ namespace Eosat1
             { "note.hints",    new[] { "The key list along the bottom of the screen", "La liste des touches en bas de l\u2019\u00e9cran" } },
             { "note.snap",     new[] { "How far the right stick turns you", "Angle de rotation du stick droit" } },
             { "val.shown",     new[] { "SHOWN", "AFFICH\u00c9" } },
+            { "set.model",     new[] { "SATELLITE MODEL", "MOD\u00c8LE DU SATELLITE" } },
+            { "note.model",    new[] { "6U CubeSat from the course ICD, or EOS SAT-1", "CubeSat 6U de l\u2019ICD du cours, ou EOS SAT-1" } },
+            { "val.cubesat",   new[] { "6U CUBESAT", "CUBESAT 6U" } },
+            { "val.eosat",     new[] { "EOS SAT-1", "EOS SAT-1" } },
             { "val.hidden",    new[] { "HIDDEN", "MASQU\u00c9" } },
             { "feed.sandbox",  new[] { "SANDBOX", "BAC \u00c0 SABLE" } },
             { "feed.replay",   new[] { "REPLAY", "RELECTURE" } },

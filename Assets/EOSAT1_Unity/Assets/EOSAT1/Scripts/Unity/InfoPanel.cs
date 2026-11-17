@@ -208,9 +208,12 @@ namespace Eosat1
             rowStart = -1;
             headerTime = s.Valid ? AstroTime.ToIso(s.SimTime).Replace('T', ' ').Replace("Z", " UTC") : "waiting for data";
             if (a.CanControlTime) headerChip = a.paused ? "PAUSED" : "x" + a.Speed.ToString("0.##", Inv);
+            else if (s.Valid && s.Frozen) headerChip = "FROZEN";
+            else if (s.Valid && !double.IsNaN(s.Speed)) headerChip = s.Speed > 1.01 || s.Speed < 0.99 ? "sim x" + s.Speed.ToString("0.##", Inv) : "";
             else headerChip = s.Valid && s.SimRate > 1.5 ? "sim x" + s.SimRate.ToString("0", Inv) : "";
             sb.Append("<b>EOSAT-1</b>  ").Append(headerTime);
             if (headerChip == "PAUSED") sb.Append("   <color=#ffcc55>PAUSED</color>");
+            else if (headerChip == "FROZEN") sb.Append("   <color=#88ccff>FROZEN by instructor</color>");
             else if (headerChip.Length > 0) sb.Append("   ").Append(headerChip);
             sb.Append('\n');
             UpdateLinkWarning(a, s);
@@ -257,7 +260,45 @@ namespace Eosat1
             else if (s.Antenna.State == DeployState.Jammed) sb.Append(Bad("JAMMED"));
             else if (s.Antenna.State == DeployState.Deployed) sb.Append(Good("DEPLOYED"));
             else sb.Append(Warn(s.Antenna.Label));
+            // the deployment microswitch can disagree with the truth when the instructor injects a failure
+            if (s.AntennaSensorDisagrees)
+                sb.Append("  ").Append(Warn("sensor says " + s.AntennaSensor));
+            else if (!string.IsNullOrEmpty(s.AntennaSensor) && s.Antenna.Present && s.Antenna.State != DeployState.Deployed
+                     && s.Antenna.State != DeployState.Stowed && s.AntennaSensor != "UNKNOWN")
+                sb.Append("  sensor ").Append(s.AntennaSensor);
             sb.Append('\n');
+
+            // What the simulator, flight director and instructor have set (smo-vr/1 mission fields)
+            if (s.Phase != null || s.ScMode != null)
+            {
+                BeginRow("Mission", "Mission          ");
+                sb.Append(s.Phase != null ? Pretty(s.Phase) : "?").Append("   mode ");
+                string m = s.ScMode ?? "?";
+                sb.Append(m == "EMERGENCY" ? Bad(m) : m == "SAFE" ? Warn(m) : m == "?" ? m : Good(m));
+                if (!double.IsNaN(s.MetS)) sb.Append("   MET ").Append(Met(s.MetS));
+                sb.Append('\n');
+            }
+            if (s.AocsMode != null || s.Pointing != null)
+            {
+                BeginRow("Attitude control", "Attitude control ");
+                sb.Append(s.AocsMode != null ? Pretty(s.AocsMode) : "?");
+                if (s.Pointing != null) sb.Append("   pointing ").Append(Pretty(s.Pointing));
+                sb.Append('\n');
+            }
+            if (s.HasContact)
+            {
+                BeginRow("Ground link", "Ground link      ");
+                if (s.InContact) sb.Append(Good("IN CONTACT")).Append(string.IsNullOrEmpty(s.GroundStation) ? "" : "  " + s.GroundStation);
+                else sb.Append("no station in view");
+                sb.Append('\n');
+            }
+            if (a.ActiveFeed == FeedKind.Tcp && (s.Frozen || !double.IsNaN(s.Speed)))
+            {
+                BeginRow("Sim speed", "Sim speed        ");
+                if (s.Frozen) sb.Append(Warn("FROZEN")).Append(" (instructor)");
+                else sb.Append("x").Append(s.Speed.ToString("0.##", Inv)).Append(" (set by the instructor)");
+                sb.Append('\n');
+            }
 
             // Where is it?
             QuatD toEcef = AstroTime.EcefToEci(s.SimTime, a.space != null ? a.space.eciConvention : EciConvention.J2000).Conjugate;
@@ -277,6 +318,25 @@ namespace Eosat1
             }
             EndRow();
             text = sb.ToString();
+        }
+
+        /// <summary>COARSE_SUN -> Coarse sun; keeps short words (LEOP, SAFE) as they are.</summary>
+        static string Pretty(string word)
+        {
+            if (string.IsNullOrEmpty(word)) return "?";
+            if (word.Length <= 4) return word;
+            string w = word.Replace('_', ' ').ToLowerInvariant();
+            return char.ToUpperInvariant(w[0]) + w.Substring(1);
+        }
+
+        /// <summary>Mission elapsed time as d hh:mm:ss.</summary>
+        static string Met(double s)
+        {
+            if (s < 0) return "-" + Met(-s);
+            long t = (long)s;
+            long d = t / 86400, h = t / 3600 % 24, m = t / 60 % 60, sec = t % 60;
+            string hms = h.ToString("00", Inv) + ":" + m.ToString("00", Inv) + ":" + sec.ToString("00", Inv);
+            return d > 0 ? d.ToString(Inv) + "d " + hms : hms;
         }
 
         void AppendSource(EosatApp a, DisplayState s)

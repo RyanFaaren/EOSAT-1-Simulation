@@ -22,6 +22,7 @@ namespace Eosat1
         const string KeyHints = "eosat1.menu.hints";
         const string KeySnap = "eosat1.menu.snapTurn";
         const string KeyHost = "eosat1.menu.simHost";
+        const string KeyModel = "eosat1.menu.satModel";
 
         /// <summary>The simulator's TCP port (smo-vr/1).</summary>
         public const int SimPort = 8100;
@@ -118,6 +119,18 @@ namespace Eosat1
         }
 
         public static float SnapTurnDegrees { get { return SnapChoices[SnapChoice]; } }
+
+        /// <summary>
+        /// Which satellite to draw. True (the default): the course's 6U CubeSat (ICD smo-vr/1 issue 2,
+        /// section 6b: 0.100 x 0.226 x 0.366 m bus, fixed flap wings, 4 UHF elements on the zenith deck).
+        /// False: the detailed EOS SAT-1 model from the scene. Read live by CubeSatModel, so it also
+        /// works when the demo scene is opened directly.
+        /// </summary>
+        public static bool UseCubeSat
+        {
+            get { return PlayerPrefs.GetInt(KeyModel, 1) != 0; }
+            set { PlayerPrefs.SetInt(KeyModel, value ? 1 : 0); }
+        }
 
         // ------------------------------------------------------------------ menu helpers
         public static void NextFeed() { Feed = (FeedKind)Wrap((int)Feed + 1, 3); }
