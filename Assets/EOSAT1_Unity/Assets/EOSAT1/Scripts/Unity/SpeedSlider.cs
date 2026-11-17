@@ -1,7 +1,7 @@
 // EOSAT-1 VR - a slider for the simulation speed, while the simulation runs.
 // It snaps to the same steps as the - and = keys (0.5x ... 300x), so keys and slider agree.
 //
-// Desktop:  a bar at the bottom left of the screen; click or drag it (the camera doesn't
+// Desktop:  a bar at the bottom right of the screen; click or drag it (the camera doesn't
 //           move while you do).
 // Headset:  a bar on the left controller, above the info panel. Point the right controller
 //           at it and hold the right GRIP, then slide (the right trigger is already "body axes").
@@ -121,7 +121,7 @@ namespace Eosat1
             float w = Mathf.Min(Screen.width * 0.4f, 620f * scale);
             float h = 78f * scale;
             float helpHeight = app.infoPanel != null && app.infoPanel.showHelp ? Mathf.Max(11, Screen.height / 72) * 1.4f + 26f : 0f;
-            panelRect = new Rect(10f, Screen.height - helpHeight - h - 12f, w, h);   // left edge, lined up with the info panel
+            panelRect = new Rect(Screen.width - w - 10f, Screen.height - helpHeight - h - 12f, w, h);   // right edge, clear of the panels on the left
             float pad = 22f * scale;
             trackRect = new Rect(panelRect.x + pad, panelRect.y + h * 0.5f - 3f * scale, w - 2f * pad, 6f * scale);
         }
