@@ -62,7 +62,20 @@ In the Editor's Scene view the room only appears while playing.
 
 ## Controls
 
-**Mouse and keyboard** (also work while someone wears the headset)
+### On the computer screen (made for first-time users)
+
+Everything can be done with the mouse:
+
+- **Drag** to look around the satellite, **scroll** to zoom.
+- **Control bar** along the bottom: every action is a labelled button, in groups (Time, Solar
+  panels & antenna, Point the satellite, Test a fault, Help). Each button shows the key that
+  does the same, and lights up to show the current state (paused, panel open, pointing mode).
+- **Views** panel at the top right: satellite camera, whole Earth, orbit path, solar panel
+  line, body axes, camera line.
+- **Rest the mouse on any button** and a sentence explains what it does.
+- **F1** (or the *All controls* button) opens a help card with every key. It opens by itself
+  the first time the simulation runs on a computer.
+- **Tab** hides or shows the control bar, **H** the status panel.
 
 | Key | Does |
 |---|---|
@@ -72,38 +85,51 @@ In the Editor's Scene view the room only appears while playing.
 | `-` `=` | slower / faster (0.5× to 300×) |
 | `←` `→` | jump back / forward 60 s (back = like reloading a saved point) |
 | `Backspace` | restart the scenario |
-| `1` `2` | deploy solar panel −Y / +Y |
-| `3` `4` | deploy antenna / inject or clear an antenna jam |
-| `5` | inject or clear a solar panel jam (a panel folding out sticks at 40%; panels already out are not affected) |
-| `6` `7` | stow the solar panels / stow the antenna (stowing also clears that part's jam) |
+| `1` `2` | open solar panel 1 (−Y) / 2 (+Y) |
+| `3` `4` `5` | open antenna / antenna jam on, off / panel jam on, off |
+| `6` `7` | fold the panels / the antenna |
 | `N` `S` `R` `T` | point at Earth / point the panels at the Sun / roll 25° to image / tumble |
-| `G` `B` | body axes / camera boresight and its footprint on Earth |
+| `G` `B` | body axes / camera line and its footprint on Earth |
 | `L` | view frame: Earth below (default) or inertial (ECI axes, up = celestial north) |
 | `M` | data source: Sandbox → Replay → Live link |
-| `H` | info panel |
+| `H` / `Tab` / `F1` | status panel / control bar / help card |
 | `C` | satellite camera view: off → corner picture → full screen (wheel or `[` `]` zooms it) |
 | `Z` | zoom out to the whole Earth / back to the spacecraft |
-| `O` | orbit path on / off |
-| `P` | solar panel axis on / off |
+| `O` / `P` | orbit path / solar panel line on, off |
+| `Esc` | main menu |
 
-The last four also have buttons at the top right of the screen (the **Views** panel).
+Satellite commands act on the built-in simulator only (Sandbox). With the real simulator,
+commands come from mission control, as they should; the bar then says so.
 
-Commands (`1`–`5`, `N S R T`) act on the built-in simulator only. With the real simulator,
-commands come from mission control, as they should.
+### In the headset (Quest or any OpenXR headset)
 
-**Headset** (Quest or any OpenXR headset): walk around the spacecraft for real, or
+Walk around the spacecraft for real, or fly with the **jetpack**.
 
 | Control | Does |
 |---|---|
-| Left stick | move where you look |
-| Right stick | left/right snap turn, up/down rise/sink |
-| `A` / `B` | deploy the next panel (or clear a panel jam) / deploy the antenna (or clear its jam) |
-| `X` / `Y` | info panel on the left controller / time 1× → 10× → 60× |
-| Left grip / Menu | pause / restart |
-| Right / left trigger | body axes / camera boresight |
+| **MENU button (left controller)** | **the VR menu**: what every control does, and a button for every action |
+| Left stick | jetpack: fly forwards / back / sideways |
+| Right stick | left/right snap turn, up/down jetpack up / down |
+| `A` / `B` | open the next panel / the antenna (or free a jam) |
+| `X` / `Y` | status panel on the left controller / time 1× → 10× → 60× |
+| Left grip | pause |
+| Right / left trigger | body axes / camera line (in the VR menu: press the button you point at) |
 | Right grip | whole Earth / back to the spacecraft |
 | Right stick click | satellite camera screen (above the right controller) |
 | Left stick click | orbit path on / off |
+
+- **VR menu.** It opens in front of you, in the main menu's style, with three pages: *Controls*
+  (both controllers explained), *Satellite* (open / fold, pointing, jams) and *Time & views*.
+  Point a controller at a button and pull the trigger. The bottom row has *Back to start*,
+  *Main menu* and *Close*. A reminder of the MENU button shows for the first seconds.
+- **Space gloves.** Your hands are suit gloves (built in code, `VrHands`): the fingers close
+  with the grip, the index finger with the trigger, the thumb when it rests on a button.
+- **Jetpack.** It speeds up and slows down smoothly, hisses, and rumbles the controller. The
+  flight zone is a cylinder around the spacecraft: 6 m in radius, from 3 m below your
+  starting height to 3.5 m above. Near the edge a cyan grid appears and the jets stop there
+  (walking is never blocked). A line of text shows your height against the satellite. The
+  numbers are on the `VrJetpack` component.
+- **Messages.** What each command did is shown low in front of you for a few seconds.
 
 You start about 3 m behind and to the left of the spacecraft, facing it. It floats with
 its centre at 1.45 m, so you look slightly down at the cameras' side and up at the top.
@@ -130,7 +156,7 @@ its centre at 1.45 m, so you look slightly down at the cameras' side and up at t
   panels' version of the camera boresight line: point it at the Sun for full power. The
   status panel's "Panels in sun?" row gives the matching numbers.
 
-The on-screen display (status panel, key list, messages and the Views buttons) uses the
+The on-screen display (status panel, control bar, messages and the Views buttons) uses the
 main menu's style: navy panels with a cyan border, cyan headings, amber for warnings. It is
 drawn by `HudStyle`.
 
@@ -292,13 +318,15 @@ EOSAT1/
   Scripts/Unity/Menu/  MissionControlMenu (the menu and its screens), MissionControlRoom (the room),
                     MenuKit (quads, text, buttons), MenuSettings (remembered choices)
   Scripts/Unity/    EosatApp (conductor), SpaceScene (Earth/Sun/Moon/stars placement),
-                    SatelliteView + DeployableJoint, InfoPanel, DesktopControls, VrRig,
+                    SatelliteView + DeployableJoint, InfoPanel, DesktopControls,
+                    DesktopHud (control bar, tooltips, help card),
+                    VrRig, VrHands (space gloves), VrMenu (headset menu and messages), VrJetpack,
                     ViewDirector (satellite camera, whole Earth, panel axes, buttons), OrbitPathView,
                     HudStyle (the on-screen display's look),
                     InputShim, SimToUnity, ProceduralMeshes, FaceCamera
   Editor/           EosatSceneBuilder (the EOSAT-1 menu; builds the spacecraft from the parts list)
                     EosatMenuTools (menu scene helpers; Play starts at the main menu)
-  Resources/        EosatScreen.shader (the satellite camera screen in the headset)
+  Resources/        EosatScreen.shader (the satellite camera screen in the headset), EosatSuit.shader (gloves)
   Shaders/          Planet, Atmosphere, SunGlow, Stars, UnlitColor, GlowAdditive, GridFloor, HudText
                     Room, UiPanel, MapScreen, ConsoleScreen (main menu)
   Textures/         earth_day, earth_night, moon; panel_a/panel_b (+ _mask), mli_gold (+ _normal)
@@ -337,6 +365,9 @@ Tools/
 ## Troubleshooting
 
 - **Compile errors**: paste them to me (see the note at the top).
+- **Gloves sit at an odd angle on the controllers**: select *Player Rig* while playing and turn
+  them with *Left Tweak* / *Right Tweak* on the `Vr Hands` component, then tell me the numbers
+  (or untick *Space Gloves* on `Vr Rig` to get the plain blocks back).
 - **A message about missing files after building**: the `Textures` and `Data` folders must
   sit next to `Scripts` inside the EOSAT1 folder.
 - **Pink materials**: the scene was built before URP was active, or with another pipeline.
