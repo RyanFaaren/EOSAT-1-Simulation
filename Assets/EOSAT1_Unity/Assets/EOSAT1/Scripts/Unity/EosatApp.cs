@@ -100,6 +100,8 @@ namespace Eosat1
             if (GetComponent<ViewDirector>() == null) gameObject.AddComponent<ViewDirector>();
             // the control bar, tooltips and help card on the computer screen
             if (GetComponent<DesktopHud>() == null) gameObject.AddComponent<DesktopHud>();
+            // the sky that the spacecraft's metal (gold foil, camera hoods) reflects
+            if (GetComponent<SpaceReflections>() == null) gameObject.AddComponent<SpaceReflections>();
         }
 
         void Start()

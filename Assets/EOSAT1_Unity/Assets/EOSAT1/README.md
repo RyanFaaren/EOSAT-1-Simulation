@@ -207,6 +207,33 @@ checking a change. The panel and foil textures come from
 `Tools/make_spacecraft_textures.py` (cell layouts counted on the picture: panel −Y has 3
 strings × 2 rows × 18 cells, panel +Y 3 × 3 × 14).
 
+**The metal finish.** The body's gold foil (multi-layer insulation) is a metal surface, not a
+painted one, so it looks the way the reference pictures show: gold that mirrors what is around
+it, broken up by the foil's waves and wrinkles.
+
+- *Textures, 2048 × 2048, one picture per 900 mm of foil* (0.44 mm a pixel, no visible
+  repeats on a face): `mli_gold.png` is the foil's own metal colour (no shading painted in),
+  `mli_gold_normal.png` its broad waves, soft wrinkles, puckered patches, a few folds and a
+  fine grain, `mli_gold_mask.png` how metallic (R) and how glossy (A) each spot is: glossy
+  where the sheet is smooth, duller in the puckers and folds. Remake them with
+  `python3 make_spacecraft_textures.py --only foil`.
+- *Something to reflect.* The scene has no skybox, so metal used to mirror black and looked
+  like paint. `SpaceReflections` adds a reflection probe at the spacecraft that sees only the
+  sky: the Earth below (clouds, night side, city lights), the atmosphere's glow, the Moon, the
+  Sun and the stars. It redraws a few times a second (more when time is sped up), so the
+  reflections follow the ground below, sunrise, sunset and eclipses; turning the spacecraft
+  needs no redraw. The sky objects move to layer 29 so the probe can draw them alone (every
+  camera still draws them). It needs **Realtime Reflection Probes** in Quality settings, now
+  ticked (and switched on at start if not). Inspector settings on the *EOSAT-1 App* while
+  playing: resolution, how often it redraws, and *Empty Sky*, the faint colour metal shows
+  where it mirrors empty space.
+- *Camera hoods and cups* use their own satin bronze (`hood`), metallic 0.95.
+- *The solar panels are unchanged*: their faces, backs and edges have Environment Reflections
+  turned off, so they look exactly as before.
+
+Like all metal in space, a face that mirrors empty sky is dark and a face that mirrors the
+sunlit Earth is bright; in the Earth's shadow everything goes dark, as it should.
+
 **Moving parts** are driven by `DeployableJoint` components (hinge axis + angle, captured
 stowed pose) on the `Hinge …` objects under the spacecraft; `SatelliteView` moves them from
 the data. A CAD import can reuse them: put the CAD panels under the same hinge objects.
@@ -322,6 +349,7 @@ EOSAT1/
                     DesktopHud (control bar, tooltips, help card),
                     VrRig, VrHands (space gloves), VrMenu (headset menu and messages), VrJetpack,
                     ViewDirector (satellite camera, whole Earth, panel axes, buttons), OrbitPathView,
+                    SpaceReflections (the sky the spacecraft's metal mirrors),
                     HudStyle (the on-screen display's look),
                     InputShim, SimToUnity, ProceduralMeshes, FaceCamera
   Editor/           EosatSceneBuilder (the EOSAT-1 menu; builds the spacecraft from the parts list)
@@ -329,13 +357,13 @@ EOSAT1/
   Resources/        EosatScreen.shader (the satellite camera screen in the headset), EosatSuit.shader (gloves)
   Shaders/          Planet, Atmosphere, SunGlow, Stars, UnlitColor, GlowAdditive, GridFloor, HudText
                     Room, UiPanel, MapScreen, ConsoleScreen (main menu)
-  Textures/         earth_day, earth_night, moon; panel_a/panel_b (+ _mask), mli_gold (+ _normal)
+  Textures/         earth_day, earth_night, moon; panel_a/panel_b (+ _mask), mli_gold (+ _normal, _mask)
   Data/             eosat1_model.json (the spacecraft), eosat1_one_orbit.jsonl.txt (5,671 frames),
                     bright_stars.txt
 Tools/
   eosat1_model.py               the EOS SAT-1 parts list (writes Data/eosat1_model.json)
   preview_model.py              renders the parts list without Unity
-  make_spacecraft_textures.py   solar panel and gold-foil textures
+  make_spacecraft_textures.py   solar panel and gold-foil textures (--only panels / --only foil)
   eosat_physics.py              reference physics (same formulas as the C#)
   make_one_orbit.py             regenerates the one-orbit recording and runs physics checks
   mock_vr_stub.py               TCP stand-in for vr_stub.py, with --chaos
@@ -374,6 +402,10 @@ Tools/
   Use **EOSAT-1 > Reset Materials and Rebuild**.
 - **Plain white Earth or spacecraft**: same fix; it also happens if the textures were added
   after the first build.
+- **Gold foil looks dark everywhere, like before**: the reflections are not being drawn. Check
+  *Edit > Project Settings > Quality > Realtime Reflection Probes* is ticked for the level in
+  use, and that the Hierarchy shows *Spacecraft Reflections* while playing. If you rebuilt the
+  scene with **Reset Materials**, the materials come back from the parts list as they should.
 - **Something renders in one eye only**: tell me which object; all custom shaders are
   written for single-pass stereo, but it is the first thing to check on a new headset.
 - **Headset can't connect**: same Wi-Fi as the laptop, laptop firewall allows inbound

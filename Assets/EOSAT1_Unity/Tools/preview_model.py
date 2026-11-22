@@ -188,6 +188,7 @@ class Mat:
         self.color = np.array(d.get("color", [0.8, 0.8, 0.8]), float)
         self.metal = float(d.get("metallic", 0.0))
         self.smooth = float(d.get("smoothness", 0.5))
+        self.uv_scale = float(d.get("uv_scale", 1.0))      # texture tiling on top of the mesh UVs
         self.tex = self.mask = None
         if d.get("texture"):
             self.tex = np.asarray(Image.open(os.path.join(TEXDIR, d["texture"])).convert("RGB"), np.float32) / 255.0
@@ -199,8 +200,8 @@ class Mat:
             col = np.broadcast_to(self.color, (len(uv), 3))
             return col, np.full(len(uv), self.metal), np.full(len(uv), self.smooth)
         h, w = self.tex.shape[:2]
-        u = np.mod(uv[:, 0], 1.0)
-        v = np.mod(uv[:, 1], 1.0)
+        u = np.mod(uv[:, 0] * self.uv_scale, 1.0)
+        v = np.mod(uv[:, 1] * self.uv_scale, 1.0)
         x = np.clip((u * w).astype(int), 0, w - 1)
         y = np.clip(((1 - v) * h).astype(int), 0, h - 1)         # image row 0 is v = 1 (Unity's convention)
         col = self.tex[y, x] * self.color
