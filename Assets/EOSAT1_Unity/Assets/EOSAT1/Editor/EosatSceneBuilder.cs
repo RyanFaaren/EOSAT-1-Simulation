@@ -197,8 +197,10 @@ namespace Eosat1.EditorTools
             Import("panel_b.png", 2048, TextureWrapMode.Clamp, TextureWrapMode.Clamp, true, false);
             Import("panel_a_mask.png", 2048, TextureWrapMode.Clamp, TextureWrapMode.Clamp, false, false);
             Import("panel_b_mask.png", 2048, TextureWrapMode.Clamp, TextureWrapMode.Clamp, false, false);
-            Import("mli_gold.png", 1024, TextureWrapMode.Repeat, TextureWrapMode.Repeat, true, false);
-            Import("mli_gold_normal.png", 1024, TextureWrapMode.Repeat, TextureWrapMode.Repeat, false, true);
+            // the gold foil: its metal colour, its wrinkles, and its gloss (R = metallic, A = smoothness)
+            Import("mli_gold.png", 2048, TextureWrapMode.Repeat, TextureWrapMode.Repeat, true, false);
+            Import("mli_gold_normal.png", 2048, TextureWrapMode.Repeat, TextureWrapMode.Repeat, false, true);
+            Import("mli_gold_mask.png", 2048, TextureWrapMode.Repeat, TextureWrapMode.Repeat, false, false);
         }
 
         static void Import(string file, int maxSize, TextureWrapMode u, TextureWrapMode v, bool srgb, bool normalMap)
@@ -409,7 +411,9 @@ namespace Eosat1.EditorTools
             }
 
             /// <summary>Lit material from a model definition: colour, metallic, smoothness, and optional
-            /// colour texture, normal map and metal/smoothness mask (R = metallic, A = smoothness).</summary>
+            /// colour texture, normal map and metal/smoothness mask (R = metallic, A = smoothness),
+            /// uv_scale (texture tiling on top of the mesh's UVs) and environment_reflections (false =
+            /// the material does not mirror the sky; the solar panels keep their look that way).</summary>
             Material ModelMaterial(string name, Dictionary<string, object> def)
             {
                 Color color = ColorOf(def, "color", new Color(0.8f, 0.8f, 0.8f));
@@ -453,6 +457,25 @@ namespace Eosat1.EditorTools
                     m.EnableKeyword("_METALLICGLOSSMAP");          // built-in Standard
                     if (m.HasProperty("_SmoothnessTextureChannel")) m.SetFloat("_SmoothnessTextureChannel", 0f);   // alpha of the mask
                     if (m.HasProperty("_GlossMapScale")) m.SetFloat("_GlossMapScale", smoothness);
+                }
+                float uvScale = (float)Num(def, "uv_scale", 1.0);
+                var tiling = new Vector2(uvScale, uvScale);
+                if (m.HasProperty("_BaseMap")) m.SetTextureScale("_BaseMap", tiling);          // URP Lit: every map uses it
+                if (m.HasProperty("_MainTex")) m.SetTextureScale("_MainTex", tiling);          // built-in Standard
+                if (m.HasProperty("_BaseColorMap")) m.SetTextureScale("_BaseColorMap", tiling);
+                bool mirror;
+                if (!MiniJson.TryBool(def, "environment_reflections", out mirror)) mirror = true;
+                if (m.HasProperty("_EnvironmentReflections"))                                   // URP Lit
+                {
+                    m.SetFloat("_EnvironmentReflections", mirror ? 1f : 0f);
+                    if (mirror) m.DisableKeyword("_ENVIRONMENTREFLECTIONS_OFF");
+                    else m.EnableKeyword("_ENVIRONMENTREFLECTIONS_OFF");
+                }
+                else if (m.HasProperty("_GlossyReflections"))                                   // built-in Standard
+                {
+                    m.SetFloat("_GlossyReflections", mirror ? 1f : 0f);
+                    if (mirror) m.DisableKeyword("_GLOSSYREFLECTIONS_OFF");
+                    else m.EnableKeyword("_GLOSSYREFLECTIONS_OFF");
                 }
                 if (existing == null) AssetDatabase.CreateAsset(m, path);
                 else EditorUtility.SetDirty(m);

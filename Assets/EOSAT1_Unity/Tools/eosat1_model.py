@@ -93,7 +93,7 @@ def build():
     # ------------------------------------------------------------------ camera face (+Z): two DragonEye imagers
     zf = HZ
     hood = [[196, 0], [196, 8], [182, 8], [182, 105], [168, 105], [161, 103], [160, 101], [160, 12], [0, 12]]
-    hood_m = ["bronze", "bronze", "bronze", "hood_rim", "lip", "lip", "optics", "optics"]
+    hood_m = ["hood", "hood", "hood", "hood_rim", "lip", "lip", "optics", "optics"]
     for tag, y in (("-Y", -205.0), ("+Y", 165.0)):
         x = -70.0
         parts.append(lathe("DragonEye " + tag + " hood", v3(x, y, zf), [0, 0, 1], hood, hood_m, 64))
@@ -107,7 +107,7 @@ def build():
                              [104.0, 3.0, 6.0], "optics", x_axis=(math.cos(a), math.sin(a), 0)))
     # two small gold cups below the imagers (antennas or baffles; not labelled in the sources)
     cup = [[34, 0], [34, 6], [56, 64], [50, 64], [30, 16], [0, 16]]
-    cup_m = ["bronze", "bronze", "hood_rim", "optics", "optics"]
+    cup_m = ["hood", "hood", "hood_rim", "optics", "optics"]
     for tag, (x, y) in (("-Y", (250.0, -195.0)), ("+Y", (250.0, 45.0))):
         parts.append(lathe("Nadir cup " + tag, v3(x, y, zf), [0, 0, 1], cup, cup_m, 40))
     # magnetometer booms with white heads
@@ -169,13 +169,25 @@ def build():
         for zz in (-300.0, 300.0):
             parts.append(cyl("Panel hinge " + tag, v3(pivot[0], pivot[1], zz - 30), v3(pivot[0], pivot[1], zz + 30), 9.0, "dark"))
 
+    # The gold foil and the camera hoods are metal: they mirror the sky (the Earth below, the
+    # Sun, black space) through a reflection probe at the spacecraft (SpaceReflections.cs).
+    # mli_gold's picture holds the foil's metal colour, its normal map the wrinkles and its mask
+    # the gloss (R = metallic, A = smoothness; the numbers here multiply the mask). uv_scale
+    # stretches the picture over the body: the body's UVs repeat every 420 mm (the bus's uv_mm)
+    # and one foil picture covers 900 mm (FOIL_TILE_MM in make_spacecraft_textures.py).
+    # The solar panels (faces, backs and edges) keep the look they had before the probe:
+    # "environment_reflections": false.
     materials = {
-        "mli_gold":   {"color": [0.86, 0.72, 0.38], "metallic": 0.55, "smoothness": 0.62,
-                       "texture": "mli_gold.png", "normal": "mli_gold_normal.png", "normal_scale": 0.9},
-        "panel_a":    {"color": [1, 1, 1], "metallic": 1.0, "smoothness": 1.0, "texture": "panel_a.png", "mask": "panel_a_mask.png"},
-        "panel_b":    {"color": [1, 1, 1], "metallic": 1.0, "smoothness": 1.0, "texture": "panel_b.png", "mask": "panel_b_mask.png"},
-        "panel_back": {"color": [0.16, 0.16, 0.17], "metallic": 0.1, "smoothness": 0.35},
-        "bronze":     {"color": [0.72, 0.55, 0.33], "metallic": 0.75, "smoothness": 0.72},
+        "mli_gold":   {"color": [1, 1, 1], "metallic": 1.0, "smoothness": 1.0,
+                       "texture": "mli_gold.png", "normal": "mli_gold_normal.png", "mask": "mli_gold_mask.png",
+                       "normal_scale": 1.0, "uv_scale": round(420.0 / 900.0, 6)},
+        "panel_a":    {"color": [1, 1, 1], "metallic": 1.0, "smoothness": 1.0, "texture": "panel_a.png", "mask": "panel_a_mask.png",
+                       "environment_reflections": False},
+        "panel_b":    {"color": [1, 1, 1], "metallic": 1.0, "smoothness": 1.0, "texture": "panel_b.png", "mask": "panel_b_mask.png",
+                       "environment_reflections": False},
+        "panel_back": {"color": [0.16, 0.16, 0.17], "metallic": 0.1, "smoothness": 0.35, "environment_reflections": False},
+        "bronze":     {"color": [0.72, 0.55, 0.33], "metallic": 0.75, "smoothness": 0.72, "environment_reflections": False},
+        "hood":       {"color": [0.87, 0.64, 0.45], "metallic": 0.95, "smoothness": 0.72},
         "hood_rim":   {"color": [0.05, 0.05, 0.05], "metallic": 0.3, "smoothness": 0.5},
         "lip":        {"color": [0.30, 0.40, 0.38], "metallic": 0.2, "smoothness": 0.6},
         "optics":     {"color": [0.006, 0.006, 0.008], "metallic": 0.0, "smoothness": 0.85},

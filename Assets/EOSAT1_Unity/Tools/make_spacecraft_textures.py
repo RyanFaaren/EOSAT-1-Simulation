@@ -4,13 +4,17 @@ make_spacecraft_textures.py - textures for the EOS SAT-1 model, drawn to match t
 reference render ("wings closed" picture) and the exploded view.
 
     python3 make_spacecraft_textures.py --out ../Assets/EOSAT1/Textures
+    python3 make_spacecraft_textures.py --only foil     # just the gold foil
 
 Writes
   panel_a.png, panel_a_mask.png   the six-row panel (3 strings of 2 rows of cut-corner cells,
                                   white bypass diodes along each string's centre line)
   panel_b.png, panel_b_mask.png   the three-band panel (3 strings of 4 x 16 cells; the bronze
                                   substrate shows as small diamonds between cell corners)
-  mli_gold.png, mli_gold_normal.png   crinkled gold multi-layer insulation, tiles seamlessly
+  mli_gold.png, mli_gold_normal.png, mli_gold_mask.png
+                                  crinkled gold multi-layer insulation, 2048 px, tiles seamlessly:
+                                  the foil's metal colour (no shading painted in), its wrinkles,
+                                  and how glossy it is (R = metallic, A = smoothness)
 
 Panel textures cover one whole panel: u runs along the panel's long edge (across the
 face of the body), v along the spacecraft's camera axis (top of the image = camera end).
@@ -171,64 +175,166 @@ def panel_b():
 
 
 # ------------------------------------------------------------------ gold foil
-def periodic_noise(n, beta, aniso=(1.0, 1.0), seed=0):
-    """Seamlessly tiling noise with a 1/f^beta spectrum (optionally stretched)."""
+# The body's multi-layer insulation, drawn as a metal: the colour map holds only the foil's
+# own colour (no shading painted in), the normal map holds every wrinkle, and the mask says
+# how glossy each spot is. Unity's lighting and the sky's reflection (SpaceReflections.cs)
+# then make it look like metal. One tile covers FOIL_TILE_MM of the body, so a face of
+# EOS SAT-1 shows about one tile and no repeats; at 2048 pixels that is 0.44 mm a pixel.
+FOIL_TEX = 2048
+FOIL_TILE_MM = 900.0
+
+
+def _freqs(n):
+    """Spatial frequency of every FFT bin, in cycles per tile, as (fx, fy, |f|)."""
+    f = np.fft.fftfreq(n) * n
+    fx, fy = np.meshgrid(f, f)
+    return fx, fy, np.hypot(fx, fy)
+
+
+def _shaped_noise(n, weight, seed):
+    """Seamlessly tiling noise whose spectrum is 'weight' (an n x n array), scaled to unit RMS."""
     rng = np.random.default_rng(seed)
-    white = rng.normal(size=(n, n))
-    F = np.fft.fft2(white)
-    fy = np.fft.fftfreq(n)[:, None] * aniso[1]
-    fx = np.fft.fftfreq(n)[None, :] * aniso[0]
-    f = np.sqrt(fx ** 2 + fy ** 2)
-    f[0, 0] = 1.0
-    out = np.real(np.fft.ifft2(F / f ** beta))
+    spec = np.fft.fft2(rng.normal(size=(n, n))) * weight
+    out = np.real(np.fft.ifft2(spec))
     out -= out.mean()
-    return out / (out.std() + 1e-9)
+    return out / (out.std() + 1e-12)
 
 
-def mli_gold(n=512):
-    # creases: sharp lines along the zero contours of smooth noise (long, curvy, like
-    # heat-shrunk foil), three layers at different scales and stretches, plus soft billows
-    h = np.zeros((n, n))
-    for seed, beta, aniso, sharp, wgt in ((1, 2.3, (1.0, 2.4), 3.2, 1.0), (2, 2.2, (2.1, 1.0), 3.8, 0.65),
-                                          (8, 2.4, (1.0, 1.0), 4.5, 0.35)):
-        z = periodic_noise(n, beta, aniso, seed=seed)
-        h -= wgt * np.exp(-(z * sharp) ** 2)          # a valley along each zero crossing
-    h += 0.45 * periodic_noise(n, 2.6, seed=4)         # broad billows
-    h += 0.012 * periodic_noise(n, 1.0, seed=6)        # faint fine texture
-    h = (h - h.min()) / (h.max() - h.min())
-    # normal map from the height field (wrapping gradients so it tiles)
-    k = 9.0
-    dx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * k
-    dy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * k
-    nrm = np.dstack([-dx, dy, np.ones_like(h)])     # +y up in tangent space (image rows go down)
+def _smooth01(x, lo, hi):
+    t = np.clip((x - lo) / (hi - lo), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def _slope_scaled(h, px_mm, rms_slope):
+    """Scale a height field (in pixels) so that its RMS slope is rms_slope; returns height in mm."""
+    gx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) / (2 * px_mm)
+    gy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) / (2 * px_mm)
+    s = np.sqrt(np.mean(gx ** 2 + gy ** 2)) + 1e-12
+    return h * (rms_slope / s)
+
+
+def mli_gold(n=FOIL_TEX, tile_mm=FOIL_TILE_MM):
+    """Crinkled gold foil: colour (sRGB), normal map and metal/smoothness mask, all tiling."""
+    px = tile_mm / n                                    # mm per pixel
+    fx, fy, f = _freqs(n)
+    f_mm = f / tile_mm                                  # cycles per mm
+    f_mm[0, 0] = 1e-9
+
+    def band(lo_mm, hi_mm, power=1.0):
+        """Smooth band-pass over wavelengths lo..hi mm, with a 1/f^power tilt."""
+        lam = 1.0 / f_mm
+        w = np.exp(-0.5 * (np.log(lam / np.sqrt(lo_mm * hi_mm)) / (0.5 * np.log(hi_mm / lo_mm) + 1e-9)) ** 2)
+        return w / f_mm ** power
+
+    def oriented(lam_mm, along_bw, across_bw, angle, seed, k_dirs=8):
+        """Ripples about lam_mm apart whose crests follow the direction field 'angle'."""
+        acc = np.zeros((n, n))
+        total = np.zeros((n, n))
+        for i in range(k_dirs):
+            th = np.pi * i / k_dirs
+            c, s_ = np.cos(th), np.sin(th)
+            k_along = (fx * c + fy * s_) / tile_mm      # across the crests
+            k_across = (-fx * s_ + fy * c) / tile_mm    # along the crests
+            w = (np.exp(-0.5 * ((np.abs(k_along) - 1 / lam_mm) / (along_bw / lam_mm)) ** 2) *
+                 np.exp(-0.5 * (k_across / (across_bw / lam_mm)) ** 2))
+            field = _shaped_noise(n, w, seed=seed + i)
+            d = np.angle(np.exp(2j * (angle - th))) / 2  # angular distance, period pi
+            wt = np.exp(-0.5 * (d / (np.pi / k_dirs * 0.6)) ** 2)
+            acc += wt * field
+            total += wt
+        acc /= total + 1e-9
+        return acc / (acc.std() + 1e-9)
+
+    # the way the foil is pulled: wrinkles line up along a direction that drifts over the sheet
+    angle = np.pi * (0.5 + 0.5 * np.tanh(1.2 * _shaped_noise(n, band(250, 900, 1.0), seed=21)))
+    angle = (angle + 0.35 * _shaped_noise(n, band(80, 300, 1.0), seed=22)) % np.pi
+
+    # 1. the sheet: broad waves, tilted enough to catch both the bright Earth and black space,
+    #    which is what makes a foil read as metal
+    undulate = _slope_scaled(_shaped_noise(n, band(140, 900, 1.0), seed=11), px, 0.20)
+
+    # 2. soft wrinkles all over: elongated, a few centimetres long
+    soft = oriented(38.0, 0.55, 0.30, angle, seed=200)
+    soft = _slope_scaled(soft, px, 0.07)
+
+    # 3. puckered patches: short tight ripples gathered in places (as on the reference picture)
+    rip = oriented(9.0, 0.45, 0.14, angle, seed=100)
+    rip = np.tanh(0.9 * rip)                                         # a little rounder than a sine
+    patch_noise = _shaped_noise(n, band(120, 600, 1.0), seed=31)
+    patches = _smooth01(patch_noise, 0.7, 1.6)                      # about a fifth of the sheet
+    patches *= 0.6 + 0.4 * _smooth01(_shaped_noise(n, band(40, 160, 1.0), seed=32), -0.8, 0.8)
+    ripple_h = _slope_scaled(rip, px, 0.16) * patches                # RMS slope 0.16 inside a patch
+
+    # 4. a few long folds: soft creases along the zero lines of mid-sized noise, only in places
+    z = _shaped_noise(n, band(120, 500, 1.0), seed=41)
+    crease_line = np.exp(-(z / 0.10) ** 2)
+    crease_gate = _smooth01(_shaped_noise(n, band(200, 900, 1.0), seed=42), 0.5, 1.4)
+    crease_h = _slope_scaled(-crease_line * crease_gate, px, 0.06)  # valleys
+
+    # 5. fine grain, so the foil stays crisp when you put your face up to it
+    grain = _slope_scaled(_shaped_noise(n, band(1.2, 4.0, 0.0), seed=51), px, 0.025)
+
+    h = undulate + soft + ripple_h + crease_h + grain                # mm
+
+    # normal map (tangent space, +Y = up the picture = +v, as Unity expects)
+    gx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) / (2 * px)
+    gy = (np.roll(h, 1, 0) - np.roll(h, -1, 0)) / (2 * px)          # rows run down the picture
+    nrm = np.dstack([-gx, -gy, np.ones_like(h)])
     nrm /= np.linalg.norm(nrm, axis=2, keepdims=True)
-    normal = ((nrm * 0.5 + 0.5) * 255).astype(np.uint8)
-    # colour: warm gold, darker in the creases, with some olive/brown tint variation
-    shade = np.clip(0.55 + 1.1 * (nrm[..., 0] * 0.55 + nrm[..., 1] * 0.45), 0, 1)
-    crease = np.clip((h - 0.25) / 0.5, 0, 1)
-    tint = periodic_noise(n, 1.8, seed=5)
-    light = np.array([228, 202, 118], np.float32)
-    dark = np.array([112, 84, 34], np.float32)
-    col = dark + (light - dark) * (0.15 + 0.55 * shade + 0.30 * crease)[..., None]
-    col *= (1.0 + 0.06 * tint)[..., None]
-    col[..., 2] *= (1.0 - 0.10 * np.clip(tint, 0, 2))
-    return Image.fromarray(np.clip(col, 0, 255).astype(np.uint8), "RGB"), Image.fromarray(normal, "RGB")
+    normal = np.clip(np.round((nrm * 0.5 + 0.5) * 255), 0, 255).astype(np.uint8)
+
+    # how deep in a fold each spot is (to darken the colour a little in the troughs)
+    hs = soft + ripple_h + crease_h
+    lap = (np.roll(hs, 1, 0) + np.roll(hs, -1, 0) + np.roll(hs, 1, 1) + np.roll(hs, -1, 1) - 4 * hs) / px ** 2
+    cavity = np.clip(lap / (np.percentile(np.abs(lap), 99) + 1e-9), -1, 1)   # + in troughs
+
+    # colour: the foil's own reflectance (its metal colour), warm gold, slightly uneven
+    tint = np.tanh(0.9 * _shaped_noise(n, band(200, 900, 1.0), seed=61))
+    blotch = _shaped_noise(n, band(30, 120, 1.0), seed=62)
+    gold = np.array([0.78, 0.52, 0.15])                              # linear
+    amber = np.array([0.72, 0.43, 0.10])
+    pale = np.array([0.84, 0.62, 0.24])
+    w_amber = np.clip(tint, 0, 1)[..., None] * 0.6
+    w_pale = np.clip(-tint, 0, 1)[..., None] * 0.6
+    col = gold * (1 - w_amber - w_pale) + amber * w_amber + pale * w_pale
+    col *= (1.0 + 0.035 * blotch)[..., None]
+    col *= (1.0 - 0.12 * np.clip(cavity, 0, 1) - 0.08 * crease_line * crease_gate)[..., None]
+    srgb = np.where(col <= 0.0031308, col * 12.92, 1.055 * np.power(np.clip(col, 0, None), 1 / 2.4) - 0.055)
+    colour = np.clip(np.round(srgb * 255), 0, 255).astype(np.uint8)
+
+    # mask (linear): R = metallic, A = smoothness. Mostly metal; a little diffuse keeps the
+    # shape readable where the foil mirrors black space. Glossy where the sheet is smooth,
+    # duller where it is puckered, dullest in the folds.
+    smooth = 0.74 - 0.05 * patches - 0.12 * crease_line * crease_gate + 0.025 * blotch
+    smooth -= 0.04 * np.clip(np.abs(cavity), 0, 1)
+    smooth = np.clip(smooth, 0.45, 0.85)
+    metal = 0.9 - 0.04 * patches
+    mask = np.zeros((n, n, 4), np.uint8)
+    mask[..., 0] = np.round(metal * 255).astype(np.uint8)
+    mask[..., 3] = np.round(smooth * 255).astype(np.uint8)
+
+    return (Image.fromarray(colour, "RGB"), Image.fromarray(normal, "RGB"), Image.fromarray(mask, "RGBA"))
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Assets", "EOSAT1", "Textures"))
+    ap.add_argument("--only", choices=("all", "panels", "foil"), default="all",
+                    help="write only the solar panel textures or only the gold foil")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    rgb, mask = panel_a()
-    rgb.save(os.path.join(a.out, "panel_a.png"), optimize=True)
-    mask.save(os.path.join(a.out, "panel_a_mask.png"), optimize=True)
-    rgb, mask = panel_b()
-    rgb.save(os.path.join(a.out, "panel_b.png"), optimize=True)
-    mask.save(os.path.join(a.out, "panel_b_mask.png"), optimize=True)
-    col, nrm = mli_gold()
-    col.save(os.path.join(a.out, "mli_gold.png"), optimize=True)
-    nrm.save(os.path.join(a.out, "mli_gold_normal.png"), optimize=True)
+    if a.only in ("all", "panels"):
+        rgb, mask = panel_a()
+        rgb.save(os.path.join(a.out, "panel_a.png"), optimize=True)
+        mask.save(os.path.join(a.out, "panel_a_mask.png"), optimize=True)
+        rgb, mask = panel_b()
+        rgb.save(os.path.join(a.out, "panel_b.png"), optimize=True)
+        mask.save(os.path.join(a.out, "panel_b_mask.png"), optimize=True)
+    if a.only in ("all", "foil"):
+        col, nrm, mask = mli_gold()
+        col.save(os.path.join(a.out, "mli_gold.png"), optimize=True)
+        nrm.save(os.path.join(a.out, "mli_gold_normal.png"), optimize=True)
+        mask.save(os.path.join(a.out, "mli_gold_mask.png"), optimize=True)
     print("spacecraft textures written to", os.path.abspath(a.out))
 
 

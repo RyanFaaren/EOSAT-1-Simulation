@@ -23,15 +23,17 @@
  "materials": {
   "mli_gold": {
    "color": [
-    0.86,
-    0.72,
-    0.38
+    1,
+    1,
+    1
    ],
-   "metallic": 0.55,
-   "smoothness": 0.62,
+   "metallic": 1.0,
+   "smoothness": 1.0,
    "texture": "mli_gold.png",
    "normal": "mli_gold_normal.png",
-   "normal_scale": 0.9
+   "mask": "mli_gold_mask.png",
+   "normal_scale": 1.0,
+   "uv_scale": 0.466667
   },
   "panel_a": {
    "color": [
@@ -42,7 +44,8 @@
    "metallic": 1.0,
    "smoothness": 1.0,
    "texture": "panel_a.png",
-   "mask": "panel_a_mask.png"
+   "mask": "panel_a_mask.png",
+   "environment_reflections": false
   },
   "panel_b": {
    "color": [
@@ -53,7 +56,8 @@
    "metallic": 1.0,
    "smoothness": 1.0,
    "texture": "panel_b.png",
-   "mask": "panel_b_mask.png"
+   "mask": "panel_b_mask.png",
+   "environment_reflections": false
   },
   "panel_back": {
    "color": [
@@ -62,7 +66,8 @@
     0.17
    ],
    "metallic": 0.1,
-   "smoothness": 0.35
+   "smoothness": 0.35,
+   "environment_reflections": false
   },
   "bronze": {
    "color": [
@@ -71,6 +76,16 @@
     0.33
    ],
    "metallic": 0.75,
+   "smoothness": 0.72,
+   "environment_reflections": false
+  },
+  "hood": {
+   "color": [
+    0.87,
+    0.64,
+    0.45
+   ],
+   "metallic": 0.95,
    "smoothness": 0.72
   },
   "hood_rim": {
@@ -302,9 +317,9 @@
     ]
    ],
    "materials": [
-    "bronze",
-    "bronze",
-    "bronze",
+    "hood",
+    "hood",
+    "hood",
     "hood_rim",
     "lip",
     "lip",
@@ -473,9 +488,9 @@
     ]
    ],
    "materials": [
-    "bronze",
-    "bronze",
-    "bronze",
+    "hood",
+    "hood",
+    "hood",
     "hood_rim",
     "lip",
     "lip",
@@ -632,8 +647,8 @@
     ]
    ],
    "materials": [
-    "bronze",
-    "bronze",
+    "hood",
+    "hood",
     "hood_rim",
     "optics",
     "optics"
@@ -680,8 +695,8 @@
     ]
    ],
    "materials": [
-    "bronze",
-    "bronze",
+    "hood",
+    "hood",
     "hood_rim",
     "optics",
     "optics"
