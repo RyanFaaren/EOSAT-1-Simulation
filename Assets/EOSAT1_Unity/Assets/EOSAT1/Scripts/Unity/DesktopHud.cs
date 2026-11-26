@@ -12,7 +12,9 @@
 //   Welcome line          for the first seconds: how to look around.
 //
 // EosatApp adds this component by itself at start, so an existing scene needs no rebuild.
-// Nothing here is drawn while a headset is active (the headset has its own menu, VrMenu).
+// While someone wears the headset all of this stays on the laptop's screen, over the picture
+// the headset sees, so a second person can run the simulation for them with the mouse and
+// keys (the headset has its own menu, VrMenu). Only the camera is the headset's.
 using System;
 using System.Collections.Generic;
 using Eosat1.Core;
@@ -64,7 +66,7 @@ namespace Eosat1
         readonly List<Section> shown = new List<Section>();
         readonly List<int> lineStart = new List<int>();
         readonly List<float> lineWidth = new List<float>();
-        bool helpOpen, usedBar, built;
+        bool helpOpen, usedBar, built, headsetShown;
         float startTime;
         // the bar is laid out at full size and then shrunk about its bottom centre to fit the window
         float scale = 1f, barTopOnScreen;
@@ -231,7 +233,14 @@ namespace Eosat1
         // ------------------------------------------------------------------ every frame
         void Update()
         {
-            if (!built || UnityEngine.XR.XRSettings.isDeviceActive) return;
+            if (!built) return;
+            // the welcome line starts over when the headset goes on or comes off: it says different things
+            bool headset = UnityEngine.XR.XRSettings.isDeviceActive;
+            if (headset != headsetShown)
+            {
+                headsetShown = headset;
+                startTime = Time.unscaledTime;
+            }
 
             if (InputShim.Down(KeyCode.F1)) ToggleHelp();
             if (helpOpen)
@@ -388,7 +397,7 @@ namespace Eosat1
         // ------------------------------------------------------------------ drawing
         void OnGUI()
         {
-            if (!built || UnityEngine.XR.XRSettings.isDeviceActive) return;
+            if (!built) return;   // on the laptop's screen with or without a headset in use
             if (Event.current.type != EventType.Repaint) return;
             GUI.depth = -20;   // in front of the other panels: the help card covers them
             HudStyle.Ensure();
@@ -484,7 +493,9 @@ namespace Eosat1
         {
             float age = Time.unscaledTime - startTime;
             if (usedBar || age > welcomeSeconds) return;
-            var c = new GUIContent("<b>Drag the mouse</b> to look around        <b>Scroll</b> to zoom        <b>Click a button</b> to try it        <b>F1</b> shows every control");
+            var c = new GUIContent(headsetShown
+                ? "<b>Headset in use:</b> this screen shows what they see        <b>Click a button</b> to do it for them        <b>F1</b> shows every control"
+                : "<b>Drag the mouse</b> to look around        <b>Scroll</b> to zoom        <b>Click a button</b> to try it        <b>F1</b> shows every control");
             Vector2 s = HudStyle.Toast.CalcSize(c);
             float w = Mathf.Min(s.x, Screen.width - Margin * 2f);
             Color old = GUI.color;
@@ -564,7 +575,9 @@ namespace Eosat1
             HudStyle.DrawPanel(card);
             float x0 = card.x + cardPad, y0 = card.y + cardPad;
             GUI.Label(new Rect(x0, y0, w - cardPad * 2f, titleH), HudStyle.Spaced("HOW TO USE THE SIMULATION"), HudStyle.Title);
-            var sub = new GUIContent("You are next to EOS SAT-1, life size, 500 km above the Earth. Every button on screen does the same as its key.");
+            var sub = new GUIContent(headsetShown
+                ? "Someone is in the headset: this screen shows what they see, and every button and key works for them too (the camera is theirs)."
+                : "You are next to EOS SAT-1, life size, 500 km above the Earth. Every button on screen does the same as its key.");
             var subStyle = new GUIStyle(HudStyle.Dim);
             subStyle.alignment = TextAnchor.MiddleCenter;
             GUI.Label(new Rect(x0, y0 + titleH, w - cardPad * 2f, subH), sub, subStyle);

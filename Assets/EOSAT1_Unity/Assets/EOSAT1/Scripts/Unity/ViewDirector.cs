@@ -17,6 +17,8 @@
 // Desktop also gets a button for each at the top right (the Views panel, with the body axes
 // and the camera line too); rest the mouse on one to read what it does. Headset: right grip =
 // whole Earth, right stick click = camera screen, left stick click = orbit path, or the VR menu.
+// The Views panel and the camera's corner picture stay on the laptop's screen while the
+// headset is in use, so the person at the laptop can switch views for the one in the headset.
 //
 // EosatApp adds this component by itself at start, and it builds what it needs (camera,
 // path, screen, marker) at run time, so an existing scene needs no rebuild.
@@ -420,8 +422,8 @@ namespace Eosat1
                 if (Mathf.Abs(scroll) > 0.001f) ZoomSatCamera(scroll);
             }
 
-            // the buttons (desktop)
-            if (!headset && !HudStyle.ModalActive && InputShim.MouseDown(0))
+            // the buttons (the laptop's screen, with or without a headset in use)
+            if (!HudStyle.ModalActive && InputShim.MouseDown(0))
             {
                 LayoutButtons();
                 Vector2 m = InputShim.MousePosition();
@@ -538,7 +540,7 @@ namespace Eosat1
 
         void OnGUI()
         {
-            if (!ready || UnityEngine.XR.XRSettings.isDeviceActive) return;
+            if (!ready) return;   // on the laptop's screen with or without a headset in use
             if (Event.current.type != EventType.Repaint) return;
             GUI.depth = 50;   // behind the status panel and the key list
             HudStyle.Ensure();

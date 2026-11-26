@@ -2,7 +2,7 @@
 // It snaps to the same steps as the - and = keys (0.5x ... 300x), so keys and slider agree.
 //
 // Desktop:  a bar at the bottom right of the screen; click or drag it (the camera doesn't
-//           move while you do).
+//           move while you do). It stays on the laptop's screen while the headset is in use.
 // Headset:  a bar along the bottom of the info pad that pops out of the left wrist
 //           (VrWristPad docks it there; without the pad it floats above the left controller).
 //           Point the right controller at it and hold the right GRIP, then slide (the right
@@ -100,7 +100,7 @@ namespace Eosat1
             if (app == null) return;
             bool headset = XRSettings.isDeviceActive;
             if (headset) UpdateVr();
-            else UpdateDesktop();
+            UpdateDesktop();   // the laptop's bar works with or without a headset in use
             if (vrRoot != null && vrRoot.activeSelf != headset) vrRoot.SetActive(headset);
             if (headset) RefreshVrBar();
         }
@@ -147,7 +147,7 @@ namespace Eosat1
 
         void OnGUI()
         {
-            if (app == null || XRSettings.isDeviceActive) return;
+            if (app == null) return;
             if (white == null)
             {
                 white = new Texture2D(1, 1, TextureFormat.RGBA32, false);
@@ -280,7 +280,6 @@ namespace Eosat1
 
         void UpdateVr()
         {
-            if (desktopControls != null && !desktopControls.enabled) desktopControls.enabled = true;
             if (vrRoot == null || rig == null || rig.rightHand == null || !rig.rightHand.gameObject.activeInHierarchy)
             {
                 HoldsRightGrip = false;

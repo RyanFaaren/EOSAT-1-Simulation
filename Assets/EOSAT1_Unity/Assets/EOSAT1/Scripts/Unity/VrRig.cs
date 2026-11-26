@@ -389,14 +389,14 @@ namespace Eosat1
             if (b && app != null) app.DeployAntennaOrClearJam();
             if (x && infoPanel != null)
             {
-                infoPanel.Toggle();
+                infoPanel.ToggleHeadset();   // the laptop's status panel has its own switch (H)
                 if (app != null)
                 {
                     if (wristPad != null && wristPad.isActiveAndEnabled)
-                        app.Say(infoPanel.showOnScreen ? "Info pad on: look at your left wrist, like checking a watch"
-                                                       : "Info pad off (X turns it back on)");
+                        app.Say(infoPanel.showInHeadset ? "Info pad on: look at your left wrist, like checking a watch"
+                                                        : "Info pad off (X turns it back on)");
                     else
-                        app.Say(infoPanel.showOnScreen ? "Status panel: on your left controller" : "Status panel hidden");
+                        app.Say(infoPanel.showInHeadset ? "Status panel: on your left controller" : "Status panel hidden");
                 }
             }
             if (y && app != null) app.CycleSpeedCoarse();

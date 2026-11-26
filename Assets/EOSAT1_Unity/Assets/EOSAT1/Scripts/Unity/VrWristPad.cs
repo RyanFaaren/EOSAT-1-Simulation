@@ -423,7 +423,7 @@ namespace Eosat1
             TryDock();
 
             bool allowed = XRSettings.isDeviceActive
-                           && (info.showOnScreen || info.HasLinkWarning)
+                           && (info.showInHeadset || info.HasLinkWarning)
                            && (rig.Menu == null || !rig.Menu.IsOpen)
                            && rig.leftHand.gameObject.activeInHierarchy;
             // while the right hand works the speed bar, the pad stays out

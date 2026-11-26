@@ -3,6 +3,9 @@
 // sun? Did the antenna come out? Plus where it is, the time, and the link health.
 // Desktop: drawn on screen (H toggles). Headset: the info pad that pops out of the left
 // wrist when you look at it like a watch (VrWristPad draws it from the data below; X toggles).
+// The computer's panel stays on the laptop screen while someone wears the headset, and the
+// two are switched separately, so the person at the laptop and the one in the headset each
+// choose for themselves.
 // The buttons and the key list are DesktopHud's (desktop) and VrMenu's (headset).
 using System;
 using System.Collections.Generic;
@@ -21,7 +24,10 @@ namespace Eosat1
         public GameObject worldPanel;
         /// <summary>Set by VrWristPad: the info pad on the wrist replaces the panel on the left controller.</summary>
         [NonSerialized] public bool wristPadTakesOver;
+        [Tooltip("The status panel on the computer's screen (H toggles), with or without a headset in use.")]
         public bool showOnScreen = true;
+        [Tooltip("Headset: the info pad on the left wrist can pop out (X toggles).")]
+        public bool showInHeadset = true;
         [Tooltip("Desktop: show the control bar along the bottom of the screen (DesktopHud draws it; Tab toggles).")]
         public bool showHelp = true;
         public float refreshInterval = 0.25f;
@@ -60,9 +66,16 @@ namespace Eosat1
             }
         }
 
+        /// <summary>The computer's status panel on / off (H, or the desktop's buttons).</summary>
         public void Toggle()
         {
             showOnScreen = !showOnScreen;
+        }
+
+        /// <summary>The headset's info pad on / off (X on the left controller).</summary>
+        public void ToggleHeadset()
+        {
+            showInHeadset = !showInHeadset;
         }
 
         // set by Build: the weak-connection warning, if there is one
@@ -120,9 +133,9 @@ namespace Eosat1
             bool headset = UnityEngine.XR.XRSettings.isDeviceActive;
             // in the headset the panel on the left controller comes up by itself when the link is weak
             // (unless the wrist info pad has taken over: then the wrist screen blinks instead)
-            bool wantPanel = headset && !wristPadTakesOver && (showOnScreen || linkWarning != null);
+            bool wantPanel = headset && !wristPadTakesOver && (showInHeadset || linkWarning != null);
             if (worldPanel != null && worldPanel.activeSelf != wantPanel) worldPanel.SetActive(wantPanel);
-            Visible = showOnScreen;
+            Visible = headset ? showInHeadset : showOnScreen;
             if (Time.unscaledTime < nextRefresh || app == null) return;
             nextRefresh = Time.unscaledTime + refreshInterval;
             Build(app);
@@ -131,7 +144,8 @@ namespace Eosat1
 
         void OnGUI()
         {
-            if (UnityEngine.XR.XRSettings.isDeviceActive || app == null) return;
+            // drawn on the computer's screen even while the headset is in use (it never shows in the headset)
+            if (app == null) return;
             if (Event.current.type != EventType.Repaint) return;
             HudStyle.Ensure();
             float u = HudStyle.Unit;

@@ -103,6 +103,16 @@ Everything can be done with the mouse:
 Satellite commands act on the built-in simulator only (Sandbox). With the real simulator,
 commands come from mission control, as they should; the bar then says so.
 
+**With someone in the headset**, all of this stays on the laptop's screen, drawn over the
+picture the headset sees (it never shows inside the headset): the control bar, the status
+panel, the Views panel with the satellite camera's corner picture, the speed bar and the help
+card. A second person can click any button or press any key to run the simulation for the
+person in the headset: pause, change the speed, open the panels, point the satellite, switch
+views, test a fault or go back to the main menu. Only the camera belongs to the headset, so
+dragging and scrolling don't move the view. The laptop's status panel (`H`) and the headset's
+info pad (`X`) are switched separately. In the Unity editor, click the Game view once so it
+gets the keyboard.
+
 ### In the headset (Quest or any OpenXR headset)
 
 Walk around the spacecraft for real, or fly with the **jetpack**.
