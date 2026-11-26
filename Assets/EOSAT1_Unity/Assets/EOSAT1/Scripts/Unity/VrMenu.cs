@@ -4,10 +4,15 @@
 // style as the main menu. Point a controller at it and pull the trigger to press a button.
 //
 //   CONTROLS      what every button and stick on the two controllers does
-//   SATELLITE     open / fold the solar panels and antenna, point the satellite, test a jam
-//   TIME & VIEWS  pause, slower / faster, skip, start again; the satellite camera, the whole
-//                 Earth, the orbit path and the helper lines
+//   SATELLITE     open / fold the solar panels and antenna, point the satellite, test a jam,
+//                 and the data source (Sandbox / Replay / Live link, the computer's M key)
+//   TIME          pause, slower / faster, skip, start again, and every speed the computer has
+//                 (0.5x ... 300x), one button each
+//   VIEWS         the satellite camera and its zoom, the whole Earth, the orbit path, the
+//                 helper lines, the view frame, the computer's viewpoints, the info pad
 //   bottom row    back to where you started, the main menu, close
+//
+// Together with the controllers this does everything the computer's keys and buttons do.
 //
 // The panel stays where it opened (it moves with you when you fly). Press MENU again, or
 // CLOSE MENU, to put it away.
@@ -54,13 +59,17 @@ namespace Eosat1
 
         // the menu
         Transform root, content, tabMarker;
-        readonly Transform[] pages = new Transform[3];
-        readonly MenuButton[] tabs = new MenuButton[3];
+        const int PageCount = 4;
+        readonly Transform[] pages = new Transform[PageCount];
+        readonly MenuButton[] tabs = new MenuButton[PageCount];
         readonly List<MenuButton> buttons = new List<MenuButton>();
         readonly List<MenuButton> commandButtons = new List<MenuButton>();
         readonly List<MenuButton> timeButtons = new List<MenuButton>();
-        MenuButton pauseButton, jamPanelButton, jamAntennaButton;
+        MenuButton pauseButton, jamPanelButton, jamAntennaButton, sourceButton;
         MenuButton camButton, earthButton, pathButton, panelLineButton, axesButton, cameraLineButton;
+        MenuButton zoomInButton, zoomOutButton, frameButton, padButton;
+        readonly List<MenuButton> speedButtons = new List<MenuButton>();
+        Transform speedMarker;
         TextMesh footer, commandNote;
         Transform laser, reticle;
         MenuButton hovered;
@@ -185,10 +194,21 @@ namespace Eosat1
             return MenuKit.MeshObject(name, parent, MenuKit.Quad, m, pos, new Vector3(size.x, size.y, 1f)).transform;
         }
 
-        /// <summary>Where a button goes on the SATELLITE and TIME pages: three columns, four rows.</summary>
+        /// <summary>Where a button goes on the SATELLITE, TIME and VIEWS pages: three columns, four rows.</summary>
         static Vector3 Cell(int col, int row)
         {
             return new Vector3(-0.285f + col * 0.285f, 0.105f - row * 0.065f, 0f);
+        }
+
+        /// <summary>Where tab i sits along the top of the menu.</summary>
+        static float TabX(int i)
+        {
+            return -0.33f + i * 0.22f;
+        }
+
+        static string SpeedText(float s)
+        {
+            return (s < 1f ? s.ToString("0.0", Inv) : s.ToString("0", Inv)) + "x";
         }
 
         void BuildMenu()
@@ -208,21 +228,22 @@ namespace Eosat1
                   TextDim, TextAnchor.MiddleRight);
 
             // tabs
-            var tabSize = new Vector2(0.27f, 0.058f);
-            string[] tabNames = { "CONTROLS", "SATELLITE", "TIME & VIEWS" };
-            for (int i = 0; i < 3; i++)
+            var tabSize = new Vector2(0.205f, 0.058f);
+            string[] tabNames = { "CONTROLS", "SATELLITE", "TIME", "VIEWS" };
+            for (int i = 0; i < PageCount; i++)
             {
                 int index = i;
-                tabs[i] = Button("Tab " + tabNames[i], content, new Vector3(-0.285f + i * 0.285f, 0.205f, 0f), tabSize, tabNames[i], 0.024f, false,
+                tabs[i] = Button("Tab " + tabNames[i], content, new Vector3(TabX(i), 0.205f, 0f), tabSize, tabNames[i], 0.024f, false,
                                  delegate { SetPage(index); });
             }
-            tabMarker = Bar("Tab Marker", content, new Vector3(-0.285f, 0.168f, -0.002f), new Vector2(0.27f, 0.006f), accent);
+            tabMarker = Bar("Tab Marker", content, new Vector3(TabX(0), 0.168f, -0.002f), new Vector2(0.205f, 0.006f), accent);
             Bar("Divider", content, new Vector3(0f, 0.16f, -0.001f), new Vector2(0.84f, 0.0015f), Color.Lerp(Color.black, accent, 0.45f));
 
-            for (int i = 0; i < 3; i++) pages[i] = MenuKit.Group("Page " + tabNames[i], content, Vector3.zero);
+            for (int i = 0; i < PageCount; i++) pages[i] = MenuKit.Group("Page " + tabNames[i], content, Vector3.zero);
             BuildControlsPage(pages[0]);
             BuildSatellitePage(pages[1]);
             BuildTimePage(pages[2]);
+            BuildViewsPage(pages[3]);
 
             // bottom row, on every page
             var wide = new Vector2(0.27f, 0.055f);
@@ -249,7 +270,7 @@ namespace Eosat1
                                 "Stick\nStick click\nX\nY\nTrigger\nGrip\nMENU", h, Color.white, TextAnchor.UpperLeft);
             lk.lineSpacing = spacing;
             TextMesh la = Label("Left Actions", p, new Vector3(-0.29f, 0.108f, 0f),
-                                "fly: forwards, back, sideways\norbit path on / off\ninfo pad on / off\ntime speed 1x, 10x, 60x\ncamera line on / off\npause / play\nopen / close this menu",
+                                "fly: forwards, back, sideways\norbit path on / off\ninfo pad on / off\nnext speed, 0.5x to 300x\ncamera line on / off\npause / play\nopen / close this menu",
                                 h, ActionText, TextAnchor.UpperLeft);
             la.lineSpacing = spacing;
             // right hand
@@ -264,7 +285,7 @@ namespace Eosat1
             Label("Tip", p, new Vector3(0f, -0.128f, 0f),
                   "Info pad: turn your left wrist towards you, as if checking a watch.\n" +
                   "Walk around for real, or fly with the jetpack: up to 6 m from the satellite, and above and below it.\n" +
-                  "A and B also free a jammed panel or antenna.  The other pages have a button for everything.",
+                  "A and B also free a jam.  The other pages have a button for everything the computer can do.",
                   0.0165f, TextDim, TextAnchor.MiddleCenter);
         }
 
@@ -289,8 +310,12 @@ namespace Eosat1
             Command(p, 2, 2, "ROLL TO IMAGE", SandboxCommand.AttitudeRollImaging);
             jamPanelButton = Command(p, 0, 3, "JAM A PANEL", SandboxCommand.ToggleWingJam);
             jamAntennaButton = Command(p, 1, 3, "JAM THE ANTENNA", SandboxCommand.ToggleAntennaJam);
+            // the computer's M key: always usable, it is how you get back to Sandbox
+            sourceButton = Button("Source", p, Cell(2, 3), new Vector2(0.27f, 0.055f), "SOURCE: SANDBOX", 0.02f, false,
+                                  delegate { app.CycleFeed(); });
             commandNote = Label("Note", p, new Vector3(0f, -0.15f, 0f),
-                                "In this mode the satellite is commanded from mission control.", 0.018f, Amber, TextAnchor.MiddleCenter);
+                                "In this mode the satellite is commanded from mission control.  SOURCE switches to Sandbox.", 0.018f, Amber,
+                                TextAnchor.MiddleCenter);
             commandNote.gameObject.SetActive(false);
         }
 
@@ -314,20 +339,79 @@ namespace Eosat1
             TimeButton(p, 0, 1, "BACK 1 MIN", delegate { app.JumpSeconds(-60); });
             TimeButton(p, 1, 1, "SKIP 1 MIN", delegate { app.JumpSeconds(60); });
             TimeButton(p, 2, 1, "START AGAIN", delegate { app.Restart(); });
-            camButton = ViewButton(p, 0, 2, "SAT CAMERA", delegate { if (rig.views != null) rig.views.CycleSatCamera(); });
-            earthButton = ViewButton(p, 1, 2, "WHOLE EARTH", delegate { if (rig.views != null) rig.views.ToggleOverview(); });
-            pathButton = ViewButton(p, 2, 2, "ORBIT PATH", delegate { if (rig.views != null) rig.views.TogglePath(); });
-            panelLineButton = ViewButton(p, 0, 3, "PANEL LINE", delegate { if (rig.views != null) rig.views.TogglePanelAxes(); });
-            axesButton = ViewButton(p, 1, 3, "BODY AXES", delegate
+
+            // every speed the computer has (its - and = keys and its speed bar), one button each
+            Label("Speed Heading", p, new Vector3(-0.42f, -0.003f, 0f), "SPEED", 0.02f, accent, TextAnchor.MiddleLeft);
+            int n = app.speedSteps != null ? app.speedSteps.Length : 0;
+            const float gap = 0.0075f;
+            float w = n > 0 ? (0.855f - gap * (n - 1)) / n : 0.1f;
+            for (int i = 0; i < n; i++)
+            {
+                int index = i;
+                string text = SpeedText(app.speedSteps[i]);
+                var at = new Vector3(-0.4275f + w * 0.5f + i * (w + gap), -0.047f, 0f);
+                MenuButton b = Button("Speed " + text, p, at, new Vector2(w, 0.05f), text, 0.019f, false, delegate { app.SetSpeedIndex(index); });
+                timeButtons.Add(b);
+                speedButtons.Add(b);
+            }
+            speedMarker = Bar("Speed Marker", p, new Vector3(0f, -0.0775f, -0.002f), new Vector2(w, 0.005f), accent);
+            Label("Speed Note", p, new Vector3(0f, -0.118f, 0f),
+                  "The same speeds as the computer (its - and = keys and speed bar).\n" +
+                  "Y on the left controller picks the next one; the info pad on your wrist has a slider.",
+                  0.0165f, TextDim, TextAnchor.MiddleCenter);
+        }
+
+        void BuildViewsPage(Transform p)
+        {
+            camButton = ViewButton(p, 0, 0, "SAT CAMERA", delegate { if (rig.views != null) rig.views.CycleSatCamera(); });
+            earthButton = ViewButton(p, 1, 0, "WHOLE EARTH", delegate { if (rig.views != null) rig.views.ToggleOverview(); });
+            pathButton = ViewButton(p, 2, 0, "ORBIT PATH", delegate { if (rig.views != null) rig.views.TogglePath(); });
+            panelLineButton = ViewButton(p, 0, 1, "PANEL LINE", delegate { if (rig.views != null) rig.views.TogglePanelAxes(); });
+            axesButton = ViewButton(p, 1, 1, "BODY AXES", delegate
             {
                 if (rig.views != null) rig.views.ToggleBodyAxes();
                 else app.ToggleAxes();
             });
-            cameraLineButton = ViewButton(p, 2, 3, "CAMERA LINE", delegate
+            cameraLineButton = ViewButton(p, 2, 1, "CAMERA LINE", delegate
             {
                 if (rig.views != null) rig.views.ToggleCameraLine();
                 else app.ToggleBoresight();
             });
+            // the computer's [ and ] keys: the satellite camera's zoom, down to the real field of view
+            zoomInButton = ViewButton(p, 0, 2, "CAMERA ZOOM IN", delegate { ZoomSatCamera(2f); });
+            zoomOutButton = ViewButton(p, 1, 2, "CAMERA ZOOM OUT", delegate { ZoomSatCamera(-2f); });
+            // the computer's L key
+            frameButton = ViewButton(p, 2, 2, "VIEW: EARTH BELOW", delegate { app.ToggleViewFrame(); });
+            // the computer's V and F keys: its camera angles, as places to stand
+            ViewButton(p, 0, 3, "NEXT VIEWPOINT", delegate
+            {
+                rig.NextViewpoint();
+                Open();   // the menu comes with you
+            });
+            ViewButton(p, 1, 3, "FIRST VIEWPOINT", delegate
+            {
+                rig.FirstViewpoint();
+                Open();
+            });
+            // the computer's H key, for the headset's own info pad (X does the same)
+            padButton = ViewButton(p, 2, 3, "INFO PAD: ON", delegate { ToggleInfoPad(); });
+        }
+
+        void ZoomSatCamera(float notches)
+        {
+            ViewDirector v = rig.views;
+            if (v == null || !v.SatCameraOn) return;
+            v.ZoomSatCamera(notches);
+            bool real = v.fieldOfViewDeg <= ViewDirector.TrueFieldOfViewDeg * 1.01f;
+            app.Say("Satellite camera: " + v.fieldOfViewDeg.ToString("0.0", Inv) + " degrees wide" + (real ? " (the real field of view)" : ""));
+        }
+
+        void ToggleInfoPad()
+        {
+            InfoPanel info = rig.infoPanel;
+            if (info == null) return;
+            info.ToggleHeadset();
+            app.Say(info.showInHeadset ? "Info pad on: look at your left wrist, like checking a watch" : "Info pad off (X turns it back on)");
         }
 
         void BuildPointer()
@@ -391,10 +475,10 @@ namespace Eosat1
 
         void SetPage(int index)
         {
-            page = Mathf.Clamp(index, 0, 2);
-            for (int i = 0; i < 3; i++) pages[i].gameObject.SetActive(i == page);
+            page = Mathf.Clamp(index, 0, PageCount - 1);
+            for (int i = 0; i < PageCount; i++) pages[i].gameObject.SetActive(i == page);
             Vector3 m = tabMarker.localPosition;
-            m.x = -0.285f + page * 0.285f;
+            m.x = TabX(page);
             tabMarker.localPosition = m;
         }
 
@@ -541,6 +625,25 @@ namespace Eosat1
             SetLabel(panelLineButton, OnOff("PANEL LINE", v != null && v.PanelAxesVisible));
             SetLabel(axesButton, OnOff("BODY AXES", app.satelliteView != null && app.satelliteView.AxesVisible));
             SetLabel(cameraLineButton, OnOff("CAMERA LINE", app.satelliteView != null && app.satelliteView.BoresightVisible));
+
+            // the buttons that match the computer's other keys
+            bool camOn = v != null && v.SatCameraOn;
+            if (zoomInButton != null) zoomInButton.Enabled = camOn;
+            if (zoomOutButton != null) zoomOutButton.Enabled = camOn;
+            bool earthBelow = app.space == null || app.space.viewFrame == SpaceScene.ViewFrame.EarthBelow;
+            SetLabel(frameButton, earthBelow ? "VIEW: EARTH BELOW" : "VIEW: STARS FIXED");
+            SetLabel(padButton, OnOff("INFO PAD", rig.infoPanel != null && rig.infoPanel.showInHeadset));
+            string source = app.ActiveFeed == FeedKind.Replay ? "REPLAY" : app.ActiveFeed == FeedKind.Tcp ? "LIVE LINK" : "SANDBOX";
+            SetLabel(sourceButton, "SOURCE: " + source);
+            if (speedMarker != null && speedButtons.Count > 0)
+            {
+                int at = Mathf.Clamp(app.speedIndex, 0, speedButtons.Count - 1);
+                Vector3 mp = speedMarker.localPosition;
+                mp.x = speedButtons[at].Root.localPosition.x;
+                speedMarker.localPosition = mp;
+                bool show = canTime && !app.paused;
+                if (speedMarker.gameObject.activeSelf != show) speedMarker.gameObject.SetActive(show);
+            }
 
             if (footer != null)
             {

@@ -1559,10 +1559,10 @@ namespace Eosat1
             { "ctl.vrHead",    new[] { "IN THE SIMULATION", "DANS LA SIMULATION" } },
             { "ctl.vrKeys",    new[] { "Left stick\nRight stick \u2190 \u2192\nRight stick \u2191 \u2193\nA\nB\nX\nY\nLeft grip\nMENU (left)\nTriggers\nLeft wrist",
                                        "Stick gauche\nStick droit \u2190 \u2192\nStick droit \u2191 \u2193\nA\nB\nX\nY\nGrip gauche\nMENU (gauche)\nG\u00e2chettes\nPoignet gauche" } },
-            { "ctl.vrDo",      new[] { "fly around\nturn\njetpack up / down\nnext panel / unjam\nantenna / unjam\ninfo pad on / off\nspeed 1x / 10x / 60x\npause\nVR menu: all controls\nbody axes / camera line\nlook at it: info pad",
-                                       "voler\ntourner\njetpack haut / bas\npanneau / d\u00e9bloquer\nantenne / d\u00e9bloquer\ninfos au poignet\nvitesse 1x/10x/60x\npause\nmenu RV : commandes\naxes / vis\u00e9e cam\u00e9ra\nregardez-le : infos" } },
+            { "ctl.vrDo",      new[] { "fly around\nturn\njetpack up / down\nnext panel / unjam\nantenna / unjam\ninfo pad on / off\nnext speed (0.5x-300x)\npause\nVR menu: all controls\nbody axes / camera line\nlook at it: info pad",
+                                       "voler\ntourner\njetpack haut / bas\npanneau / d\u00e9bloquer\nantenne / d\u00e9bloquer\ninfos au poignet\nvitesse suivante\npause\nmenu RV : commandes\naxes / vis\u00e9e cam\u00e9ra\nregardez-le : infos" } },
             { "ctl.note",      new[] { "Satellite keys work in Sandbox mode only.", "Touches du satellite : mode bac \u00e0 sable seulement." } },
-            { "ctl.vrNote",    new[] { "In this menu: point a controller and pull the trigger.", "Dans ce menu : pointez une manette et appuyez sur la g\u00e2chette." } },
+            { "ctl.vrNote",    new[] { "In this menu: point a controller and pull the trigger.\nIn the simulation, the MENU button has everything else.", "Dans ce menu : pointez une manette et appuyez sur la g\u00e2chette.\nDans la simulation, le bouton MENU a tout le reste." } },
 
             // other screens and signs
             { "map.title",     new[] { "GROUND TRACK", "TRACE AU SOL" } },
