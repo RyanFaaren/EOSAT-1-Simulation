@@ -5,8 +5,10 @@
 //   Right stick up/down   rise / sink
 //
 // It behaves like a gas-jet backpack: it speeds up and slows down smoothly instead of
-// starting and stopping dead, which is also easier on the stomach. You hear the jets hiss
-// and feel them in the controllers.
+// starting and stopping dead, which is also easier on the stomach. You feel the jets in the
+// controllers, and hear a quiet, low puff of gas only while they change your speed (setting
+// off, stopping, turning); gliding along at a steady speed is silent, as in space.
+// Settings > Jetpack sound (main menu) turns the sound off.
 //
 // The flight zone keeps you near the spacecraft: a cylinder around it, 6 m in radius, from
 // 3 m below your starting height to 3.5 m above it. Close to the edge a cyan grid appears,
@@ -48,12 +50,16 @@ namespace Eosat1
         public Color edgeColor = new Color(0.25f, 0.8f, 1f);
 
         [Header("Feel")]
+        [Tooltip("A soft puff of gas while the jets change your speed. Settings > Jetpack sound sets this when you start from the main menu.")]
         public bool sound = true;
-        [Range(0f, 1f)] public float soundVolume = 0.2f;
+        [Tooltip("How loud the puff is at its strongest. It used to be 0.2 with a constant hiss; 0.06 is a quiet background sound.")]
+        [Range(0f, 1f)] public float soundVolume = 0.06f;
         public bool rumble = true;
 
-        /// <summary>How hard the jets are working, 0 to 1.</summary>
+        /// <summary>How hard you are pushing the sticks, 0 to 1.</summary>
         public float Thrust { get; private set; }
+        /// <summary>How hard the jets are firing to change your speed, 0 to 1 (0 while gliding at a steady speed).</summary>
+        public float Jets { get; private set; }
         /// <summary>True while the jets are being held back by the edge of the flight zone.</summary>
         public bool AtEdge { get; private set; }
 
@@ -73,8 +79,9 @@ namespace Eosat1
         {
             if (rig == null) rig = GetComponent<VrRig>();
             if (rig != null && rig.app != null && rig.app.space != null) centre = rig.app.space.transform.position;
+            if (MenuSettings.LaunchedFromMenu) sound = MenuSettings.JetpackSound;
             BuildEdge();
-            if (sound) BuildSound();
+            BuildSound();   // even with the sound off, so ticking 'sound' while playing works
         }
 
         void OnDestroy()
@@ -95,6 +102,7 @@ namespace Eosat1
             // headset taken off: VrRig stops calling Fly, so quieten the jets here
             if (XRSettings.isDeviceActive) return;
             Thrust = 0f;
+            Jets = 0f;
             if (hiss != null) hiss.volume = 0f;
             if (edge != null && edge.activeSelf) edge.SetActive(false);
         }
@@ -113,6 +121,7 @@ namespace Eosat1
             Vector3 side = Vector3.Cross(Vector3.up, fwd);
             Vector3 wish = (fwd * move.y + side * move.x) * flySpeed + Vector3.up * (climb * climbSpeed);
             bool pushing = wish.sqrMagnitude > 1e-4f;
+            Vector3 before = velocity;
             velocity = Vector3.MoveTowards(velocity, wish, (pushing ? acceleration : braking) * dt);
             Thrust = Mathf.Clamp01(Mathf.Max(move.magnitude, Mathf.Abs(climb)));
             if (pushing) lastThrustTime = Time.unscaledTime;
@@ -152,6 +161,9 @@ namespace Eosat1
             }
             body.position = new Vector3(pos.x + flat.x, y, pos.z + flat.z);
             AtEdge = blocked && pushing;
+            // the jets only fire while your speed changes; the edge of the zone stops you without them
+            float change = blocked ? 0f : (velocity - before).magnitude / Mathf.Max(dt, 1e-4f);
+            Jets = Mathf.Clamp01(change / Mathf.Max(0.1f, Mathf.Min(acceleration, braking)));
 
             Feedback(move, climb, dt);
         }
@@ -192,12 +204,14 @@ namespace Eosat1
                 }
             }
 
-            // the jets: a hiss, and a light rumble in the hand that is steering
+            // the jets: a soft puff while they change your speed, and a light rumble in the hand that is steering
             if (hiss != null)
             {
-                float want = sound ? Thrust * soundVolume : 0f;
-                hiss.volume = Mathf.MoveTowards(hiss.volume, want, dt * 1.5f);
-                hiss.pitch = 0.9f + 0.25f * Thrust;
+                float want = sound ? Jets * soundVolume : 0f;
+                // fades in over about 0.1 s and out over about 0.3 s, so each puff has soft edges
+                float rate = want > hiss.volume ? soundVolume * 10f : soundVolume * 3.5f;
+                hiss.volume = Mathf.MoveTowards(hiss.volume, want, dt * Mathf.Max(0.05f, rate));
+                hiss.pitch = 0.85f + 0.12f * Jets;
             }
             if (rumble && Thrust > 0.05f && Time.unscaledTime >= nextRumble)
             {
@@ -314,24 +328,29 @@ namespace Eosat1
             }
         }
 
-        // ------------------------------------------------------------------ the jets' hiss
+        // ------------------------------------------------------------------ the jets' puff
         void BuildSound()
         {
             if (rig == null || rig.head == null) return;
             const int rate = 22050;
             int total = rate * 2;
-            int fade = rate / 5;
+            int fade = rate / 4;
             var raw = new float[total];
             var random = new System.Random(7);
-            float low = 0f, lower = 0f;
+            float low = 0f, lower = 0f, peak = 1e-4f;
             for (int i = 0; i < total; i++)
             {
-                // white noise with the harsh top taken off: a soft rush of gas
+                // white noise with everything above a few hundred hertz taken off: a low, soft
+                // rush of gas instead of a hiss (the old one kept everything up to about 1.5 kHz)
                 float white = (float)(random.NextDouble() * 2.0 - 1.0);
-                low += (white - low) * 0.35f;
-                lower += (low - lower) * 0.5f;
-                raw[i] = lower * 1.6f;
+                low += (white - low) * 0.06f;
+                lower += (low - lower) * 0.12f;
+                raw[i] = lower;
+                peak = Mathf.Max(peak, Mathf.Abs(lower));
             }
+            // the same loudness whatever the filter did; how loud it plays is soundVolume's job
+            float gain = 0.6f / peak;
+            for (int i = 0; i < total; i++) raw[i] *= gain;
             // blend the end into the start so the loop has no click
             int length = total - fade;
             var data = new float[length];

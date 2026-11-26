@@ -249,7 +249,7 @@ namespace Eosat1
                                 "Stick\nStick click\nX\nY\nTrigger\nGrip\nMENU", h, Color.white, TextAnchor.UpperLeft);
             lk.lineSpacing = spacing;
             TextMesh la = Label("Left Actions", p, new Vector3(-0.29f, 0.108f, 0f),
-                                "fly: forwards, back, sideways\norbit path on / off\nstatus panel on / off\ntime speed 1x, 10x, 60x\ncamera line on / off\npause / play\nopen / close this menu",
+                                "fly: forwards, back, sideways\norbit path on / off\ninfo pad on / off\ntime speed 1x, 10x, 60x\ncamera line on / off\npause / play\nopen / close this menu",
                                 h, ActionText, TextAnchor.UpperLeft);
             la.lineSpacing = spacing;
             // right hand
@@ -261,8 +261,10 @@ namespace Eosat1
                                 "turn left / right\njetpack up / down\nsatellite camera screen\nopen next solar panel\nopen the antenna\nbody axes on / off\nwhole Earth view",
                                 h, ActionText, TextAnchor.UpperLeft);
             ra.lineSpacing = spacing;
-            Label("Tip", p, new Vector3(0f, -0.125f, 0f),
-                  "Walk around for real, or fly with the jetpack: up to 6 m from the satellite, and above and below it.\nA and B also free a jammed panel or antenna.  The other pages have a button for everything.",
+            Label("Tip", p, new Vector3(0f, -0.128f, 0f),
+                  "Info pad: turn your left wrist towards you, as if checking a watch.\n" +
+                  "Walk around for real, or fly with the jetpack: up to 6 m from the satellite, and above and below it.\n" +
+                  "A and B also free a jammed panel or antenna.  The other pages have a button for everything.",
                   0.0165f, TextDim, TextAnchor.MiddleCenter);
         }
 

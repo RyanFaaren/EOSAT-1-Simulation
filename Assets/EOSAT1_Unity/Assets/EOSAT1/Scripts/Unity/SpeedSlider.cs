@@ -3,8 +3,10 @@
 //
 // Desktop:  a bar at the bottom right of the screen; click or drag it (the camera doesn't
 //           move while you do).
-// Headset:  a bar on the left controller, above the info panel. Point the right controller
-//           at it and hold the right GRIP, then slide (the right trigger is already "body axes").
+// Headset:  a bar along the bottom of the info pad that pops out of the left wrist
+//           (VrWristPad docks it there; without the pad it floats above the left controller).
+//           Point the right controller at it and hold the right GRIP, then slide (the right
+//           trigger is already "body axes"). While the pad is folded away the bar is too.
 //
 // Nothing to set up: this script adds itself to the simulation scene when it loads.
 // When the time comes from the live simulator (Live link), the slider is greyed out.
@@ -206,6 +208,11 @@ namespace Eosat1
         /// <summary>True while the right controller points at the VR speed bar or drags it, so the right grip's other job (VrRig: whole-Earth view) waits.</summary>
         public static bool HoldsRightGrip;
 
+        /// <summary>The headset's bar, once built (VrWristPad moves it onto the info pad).</summary>
+        public Transform VrBar { get { return vrRoot != null ? vrRoot.transform : null; } }
+        /// <summary>The bar's backing: its width and height in its own units.</summary>
+        public Vector2 VrBarSize { get { return new Vector2(vrBarWidth + 0.03f, 0.075f); } }
+
         void BuildVrBar()
         {
             Transform left = rig != null ? rig.leftHand : null;
@@ -289,10 +296,13 @@ namespace Eosat1
             prevGrip = grip;
 
             var ray = new Ray(rig.rightHand.position, rig.rightHand.forward);
-            Vector3 local;
-            float distance;
+            Vector3 local = Vector3.zero;
+            float distance = 0f;
             float w = vrBarWidth;
-            bool hits = MenuKit.RayToLocalPlane(ray, vrRoot.transform, out local, out distance) && distance < 1.5f;
+            // folded away with the info pad: nothing to point at
+            bool shown = vrRoot.activeInHierarchy;
+            if (!shown) vrDragging = false;
+            bool hits = shown && MenuKit.RayToLocalPlane(ray, vrRoot.transform, out local, out distance) && distance < 1.5f;
             bool onBar = hits && Mathf.Abs(local.x) <= w * 0.5f + 0.02f && Mathf.Abs(local.y) <= 0.04f;
 
             if (gripDown && onBar && CanChange) vrDragging = true;

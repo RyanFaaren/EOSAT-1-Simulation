@@ -92,7 +92,7 @@ namespace Eosat1
         readonly List<ScreenRect> screens = new List<ScreenRect>();
         readonly List<MenuButton> buttons = new List<MenuButton>();
         // settings rows: 0 language, 1 data source, 2 simulator address, 3 speed, 4 info panel, 5 hints, 6 snap
-        readonly MenuButton[] settingButtons = new MenuButton[8];
+        readonly MenuButton[] settingButtons = new MenuButton[9];
         const int AddressRow = 2;
         TextMesh addressNote;
 
@@ -402,8 +402,10 @@ namespace Eosat1
             Label("Header", s, new Vector3(0f, 1.24f, 0f), MenuKit.Spaced(T("set.title")), 0.15f, Color.white, TextAnchor.MiddleCenter);
             Divider(s, 1.08f, 2.8f);
 
-            string[] names = { T("set.language"), T("set.source"), T("set.address"), T("set.speed"), T("set.info"), T("set.hints"), T("set.snap"), T("set.model") };
-            string[] notes = { T("note.language"), "", "", T("note.speed"), T("note.info"), T("note.hints"), T("note.snap"), T("note.model") };
+            string[] names = { T("set.language"), T("set.source"), T("set.address"), T("set.speed"), T("set.info"), T("set.hints"), T("set.snap"), T("set.model"),
+                               T("set.jetSound") };
+            string[] notes = { T("note.language"), "", "", T("note.speed"), T("note.info"), T("note.hints"), T("note.snap"), T("note.model"),
+                               T("note.jetSound") };
             Action[] actions =
             {
                 null,   // language: rebuilds everything, handled below
@@ -414,10 +416,11 @@ namespace Eosat1
                 delegate { MenuSettings.ShowHints = !MenuSettings.ShowHints; },
                 delegate { MenuSettings.NextSnap(); },
                 delegate { MenuSettings.UseCubeSat = !MenuSettings.UseCubeSat; },
+                delegate { MenuSettings.JetpackSound = !MenuSettings.JetpackSound; },
             };
             for (int i = 0; i < names.Length; i++)
             {
-                float y = 0.86f - 0.25f * i;   // 8 rows, clear of the Back button
+                float y = 0.86f - 0.225f * i;   // 9 rows, clear of the Back button
                 Label("Setting Name", s, new Vector3(-1.38f, y + 0.045f, 0f), names[i], 0.085f, TextBright, TextAnchor.MiddleLeft);
                 TextMesh note = Label("Setting Note", s, new Vector3(-1.38f, y - 0.07f, 0f), notes[i], 0.052f, ActionText, TextAnchor.MiddleLeft);
                 if (i == 1) feedDescription = note;
@@ -440,7 +443,7 @@ namespace Eosat1
                         MenuSettings.Save();
                         RefreshSettings();
                     };
-                settingButtons[i] = Button("Setting Button", s, new Vector3(0.8f, y, 0f), new Vector2(1.2f, 0.22f), "", 0.08f, false, onClick);
+                settingButtons[i] = Button("Setting Button", s, new Vector3(0.8f, y, 0f), new Vector2(1.2f, 0.2f), "", 0.08f, false, onClick);
             }
             Button("Back Button", s, new Vector3(0f, -1.24f, 0f), new Vector2(1.4f, 0.22f), T("btn.back"), 0.09f, true,
                    delegate { Face(0f, "hint.turnBack"); });
@@ -1012,6 +1015,7 @@ namespace Eosat1
             if (settingButtons[5] != null) settingButtons[5].Label.text = T(MenuSettings.ShowHints ? "val.shown" : "val.hidden");
             if (settingButtons[6] != null) settingButtons[6].Label.text = MenuSettings.SnapTurnDegrees.ToString("0", Inv) + "\u00b0";
             if (settingButtons[7] != null) settingButtons[7].Label.text = T(MenuSettings.UseCubeSat ? "val.cubesat" : "val.eosat");
+            if (settingButtons[8] != null) settingButtons[8].Label.text = T(MenuSettings.JetpackSound ? "val.on" : "val.off");
             if (feedDescription != null) feedDescription.text = FeedDescription();
             UpdateSlowDisplays();
         }
@@ -1512,10 +1516,14 @@ namespace Eosat1
             { "note.snap",     new[] { "How far the right stick turns you", "Angle de rotation du stick droit" } },
             { "val.shown",     new[] { "SHOWN", "AFFICH\u00c9" } },
             { "set.model",     new[] { "SATELLITE MODEL", "MOD\u00c8LE DU SATELLITE" } },
-            { "note.model",    new[] { "6U CubeSat from the course ICD, or EOS SAT-1", "CubeSat 6U de l\u2019ICD du cours, ou EOS SAT-1" } },
+            { "note.model",    new[] { "EOS SAT-1 (the real one) or the course's 6U CubeSat", "EOS SAT-1 (le vrai) ou le CubeSat 6U du cours" } },
             { "val.cubesat",   new[] { "6U CUBESAT", "CUBESAT 6U" } },
             { "val.eosat",     new[] { "EOS SAT-1", "EOS SAT-1" } },
             { "val.hidden",    new[] { "HIDDEN", "MASQU\u00c9" } },
+            { "set.jetSound",  new[] { "JETPACK SOUND (HEADSET)", "SON DU JETPACK (CASQUE)" } },
+            { "note.jetSound", new[] { "A soft puff when the jets change your speed", "Un l\u00e9ger souffle quand les jets changent la vitesse" } },
+            { "val.on",        new[] { "ON", "ACTIV\u00c9" } },
+            { "val.off",       new[] { "OFF", "COUP\u00c9" } },
             { "feed.sandbox",  new[] { "SANDBOX", "BAC \u00c0 SABLE" } },
             { "feed.replay",   new[] { "REPLAY", "RELECTURE" } },
             { "feed.live",     new[] { "LIVE LINK", "EN DIRECT" } },
@@ -1549,10 +1557,10 @@ namespace Eosat1
             { "ctl.dispDo",    new[] { "body axes\nboresight\nview frame\ndata source\ninfo panel",
                                        "axes\nvis\u00e9e cam\u00e9ra\nrep\u00e8re de vue\nsource\npanneau d\u2019infos" } },
             { "ctl.vrHead",    new[] { "IN THE SIMULATION", "DANS LA SIMULATION" } },
-            { "ctl.vrKeys",    new[] { "Left stick\nRight stick \u2190 \u2192\nRight stick \u2191 \u2193\nA\nB\nX\nY\nLeft grip\nMENU (left)\nTriggers",
-                                       "Stick gauche\nStick droit \u2190 \u2192\nStick droit \u2191 \u2193\nA\nB\nX\nY\nGrip gauche\nMENU (gauche)\nG\u00e2chettes" } },
-            { "ctl.vrDo",      new[] { "fly around\nturn\njetpack up / down\nnext panel / unjam\nantenna / unjam\nstatus panel\nspeed 1x / 10x / 60x\npause\nVR menu: all controls\nbody axes / camera line",
-                                       "voler\ntourner\njetpack haut / bas\npanneau / d\u00e9bloquer\nantenne / d\u00e9bloquer\npanneau d\u2019\u00e9tat\nvitesse 1x/10x/60x\npause\nmenu RV : commandes\naxes / vis\u00e9e cam\u00e9ra" } },
+            { "ctl.vrKeys",    new[] { "Left stick\nRight stick \u2190 \u2192\nRight stick \u2191 \u2193\nA\nB\nX\nY\nLeft grip\nMENU (left)\nTriggers\nLeft wrist",
+                                       "Stick gauche\nStick droit \u2190 \u2192\nStick droit \u2191 \u2193\nA\nB\nX\nY\nGrip gauche\nMENU (gauche)\nG\u00e2chettes\nPoignet gauche" } },
+            { "ctl.vrDo",      new[] { "fly around\nturn\njetpack up / down\nnext panel / unjam\nantenna / unjam\ninfo pad on / off\nspeed 1x / 10x / 60x\npause\nVR menu: all controls\nbody axes / camera line\nlook at it: info pad",
+                                       "voler\ntourner\njetpack haut / bas\npanneau / d\u00e9bloquer\nantenne / d\u00e9bloquer\ninfos au poignet\nvitesse 1x/10x/60x\npause\nmenu RV : commandes\naxes / vis\u00e9e cam\u00e9ra\nregardez-le : infos" } },
             { "ctl.note",      new[] { "Satellite keys work in Sandbox mode only.", "Touches du satellite : mode bac \u00e0 sable seulement." } },
             { "ctl.vrNote",    new[] { "In this menu: point a controller and pull the trigger.", "Dans ce menu : pointez une manette et appuyez sur la g\u00e2chette." } },
 

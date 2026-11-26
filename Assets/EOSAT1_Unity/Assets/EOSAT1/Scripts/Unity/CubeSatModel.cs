@@ -13,7 +13,8 @@
 //
 // The real thing is small (37 cm tall), so it is drawn bigger (displayScale, 2.5x by default:
 // about the size of the EOS SAT-1 model it replaces, so the camera line and the body axes still fit).
-// The EOS SAT-1 parts stay in the scene, hidden; Settings > Satellite model brings them back.
+// Only drawn when Settings > Satellite model is set to 6U CUBESAT (EOS SAT-1 is the default).
+// The EOS SAT-1 parts then stay in the scene, hidden.
 using Eosat1.Core;
 using UnityEngine;
 

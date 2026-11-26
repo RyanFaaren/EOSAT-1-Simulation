@@ -7,7 +7,8 @@
 // thumb comes down.
 //
 // VrRig adds this component by itself, in the simulation and in the main menu room, so an
-// existing scene needs no rebuild.
+// existing scene needs no rebuild. In the simulation the left sleeve also gets the info pad's
+// wrist computer (VrWristPad hangs it on LeftGlove).
 //
 // Where the glove sits on the controller: OpenXR reports the "grip" pose, whose axes are
 // fixed by the standard (palm on the X axis, the handle along Z). Other runtimes report a
@@ -42,8 +43,8 @@ namespace Eosat1
         public Color metal = new Color(0.42f, 0.55f, 0.72f);
         public Color stripe = new Color(0.8f, 0.14f, 0.1f);
 
-        // the point of the glove that sits on the controller's grip: inside the curled fingers
-        static readonly Vector3 GripPoint = new Vector3(0f, -0.035f, 0.015f);
+        /// <summary>The point of the glove that sits on the controller's grip: inside the curled fingers.</summary>
+        public static readonly Vector3 GripPoint = new Vector3(0f, -0.035f, 0.015f);
 
         sealed class Finger
         {
@@ -63,6 +64,12 @@ namespace Eosat1
         }
 
         Glove left, right;
+
+        /// <summary>
+        /// The left glove once it is built (null before, or without gloves). Its axes: fingers along
+        /// +Z, back of the hand +Y, the sleeve running back along -Z; scaled by 'size'.
+        /// </summary>
+        public Transform LeftGlove { get { return left != null ? left.Root : null; } }
         Material fabricMat, paddingMat, rubberMat, metalMat, stripeMat;
         readonly List<Mesh> meshes = new List<Mesh>();
         readonly Dictionary<int, Mesh> capsules = new Dictionary<int, Mesh>();
@@ -78,10 +85,7 @@ namespace Eosat1
         void Build()
         {
             if (built || (leftHand == null && rightHand == null)) return;
-            Shader sh = Resources.Load<Shader>("EosatSuit");
-            if (sh == null) sh = Shader.Find("EOSAT1/Suit");
-            if (sh == null) sh = Shader.Find("Universal Render Pipeline/Lit");
-            if (sh == null) sh = Shader.Find("EOSAT1/UnlitColor");
+            Shader sh = SuitShader();
             if (sh == null) return;
             fabricMat = NewMaterial(sh, "EOSAT1 Glove Fabric", fabric, 0.1f);
             paddingMat = NewMaterial(sh, "EOSAT1 Glove Padding", padding, 0.05f);
@@ -113,7 +117,17 @@ namespace Eosat1
             return m;
         }
 
-        static Material NewMaterial(Shader sh, string name, Color c, float shine)
+        /// <summary>The shader the suit is drawn with (lit, works in both eyes), or a fallback.</summary>
+        public static Shader SuitShader()
+        {
+            Shader sh = Resources.Load<Shader>("EosatSuit");
+            if (sh == null) sh = Shader.Find("EOSAT1/Suit");
+            if (sh == null) sh = Shader.Find("Universal Render Pipeline/Lit");
+            if (sh == null) sh = Shader.Find("EOSAT1/UnlitColor");
+            return sh;
+        }
+
+        public static Material NewMaterial(Shader sh, string name, Color c, float shine)
         {
             var m = new Material(sh);
             m.name = name;
@@ -135,6 +149,12 @@ namespace Eosat1
 
         /// <summary>How the glove (fingers along +Z, back of the hand up, thumb on the inside) sits on the tracked pose.</summary>
         Quaternion Mounting(bool isLeft)
+        {
+            return GloveMounting(rig, isLeft);
+        }
+
+        /// <summary>The same, for anything else that hangs on a hand the way the glove does (rig may be null).</summary>
+        public static Quaternion GloveMounting(VrRig rig, bool isLeft)
         {
             bool gripPose;
             if (rig != null) gripPose = rig.DevicePoseIsGrip;
@@ -378,7 +398,7 @@ namespace Eosat1
         }
 
         /// <summary>A box with rounded edges and corners, centred, of the given half sizes.</summary>
-        static Mesh RoundedBox(float hx, float hy, float hz, float radius, string name)
+        public static Mesh RoundedBox(float hx, float hy, float hz, float radius, string name)
         {
             const int lon = 24, lat = 12;
             var v = new List<Vector3>();
@@ -414,7 +434,7 @@ namespace Eosat1
         }
 
         /// <summary>A round tube along +Z from z = 0 (radius r0) to z = length (radius r1), closed at both ends.</summary>
-        static Mesh Tube(float r0, float r1, float length, int sides, string name)
+        public static Mesh Tube(float r0, float r1, float length, int sides, string name)
         {
             var v = new List<Vector3>();
             var n = new List<Vector3>();
