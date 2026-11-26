@@ -24,8 +24,9 @@ will reuse.
    out: antenna at 600 s, turn to face Earth at 900–1200 s, panels at 1300–1430 s, eclipse
    about 1980–4000 s, 25° roll to image at 4300–4800 s.
 
-> The C# has been compiled outside Unity against stand-ins for Unity's API, which catches
-> most mistakes, but not inside Unity itself. If the Console shows an error, paste it to me.
+> The C# is checked outside Unity, not inside Unity itself: most of it was compiled against
+> stand-ins for Unity's API, and the wrist info pad, the quieter jetpack and the new settings
+> were checked by hand only. If the Console shows an error, paste it to me.
 
 **Updating from an earlier version:** copy the new files over the old ones, then use
 **EOSAT-1 > Reset Materials and Rebuild** (it makes the new spacecraft materials and
@@ -416,6 +417,10 @@ Tools/
 - **Gloves sit at an odd angle on the controllers**: select *Player Rig* while playing and turn
   them with *Left Tweak* / *Right Tweak* on the `Vr Hands` component, then tell me the numbers
   (or untick *Space Gloves* on `Vr Rig` to get the plain blocks back).
+- **The info pad opens too easily, or is hard to open**: select *Player Rig* while playing and
+  change *Open Facing* (how squarely the wrist must face you) and *Open View Angle* on the
+  `Vr Wrist Pad` component; *Pad Scale* makes the pad bigger or smaller. Tell me the numbers
+  that feel right and I'll make them the defaults.
 - **A message about missing files after building**: the `Textures` and `Data` folders must
   sit next to `Scripts` inside the EOSAT1 folder.
 - **Pink materials**: the scene was built before URP was active, or with another pipeline.
