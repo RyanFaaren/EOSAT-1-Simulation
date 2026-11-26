@@ -7,8 +7,8 @@
 // thumb comes down.
 //
 // VrRig adds this component by itself, in the simulation and in the main menu room, so an
-// existing scene needs no rebuild. In the simulation the left sleeve also gets the info pad's
-// wrist computer (VrWristPad hangs it on LeftGlove).
+// existing scene needs no rebuild. In the simulation each sleeve also gets a wrist computer:
+// the info pad on the left (VrWristPad) and the satellite camera on the right (VrWristCamera).
 //
 // Where the glove sits on the controller: OpenXR reports the "grip" pose, whose axes are
 // fixed by the standard (palm on the X axis, the handle along Z). Other runtimes report a
@@ -70,6 +70,8 @@ namespace Eosat1
         /// +Z, back of the hand +Y, the sleeve running back along -Z; scaled by 'size'.
         /// </summary>
         public Transform LeftGlove { get { return left != null ? left.Root : null; } }
+        /// <summary>The right glove once it is built (VrWristCamera hangs the satellite camera on it); same axes as the left.</summary>
+        public Transform RightGlove { get { return right != null ? right.Root : null; } }
         Material fabricMat, paddingMat, rubberMat, metalMat, stripeMat;
         readonly List<Mesh> meshes = new List<Mesh>();
         readonly Dictionary<int, Mesh> capsules = new Dictionary<int, Mesh>();

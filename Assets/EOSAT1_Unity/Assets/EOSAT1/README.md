@@ -26,7 +26,8 @@ will reuse.
 
 > The C# is checked outside Unity, not inside Unity itself: most of it was compiled against
 > stand-ins for Unity's API, and the wrist info pad, the quieter jetpack, the new settings, the
-> laptop controls during VR and the new VR menu pages were checked by hand only. If the Console
+> laptop controls during VR, the new VR menu pages and the wrist camera were checked by hand
+> only. If the Console
 > shows an error, paste it to me.
 
 **Updating from an earlier version:** copy the new files over the old ones, then use
@@ -130,7 +131,7 @@ Walk around the spacecraft for real, or fly with the **jetpack**.
 | Left grip | pause |
 | Right / left trigger | body axes / camera line (in the VR menu: press the button you point at) |
 | Right grip | whole Earth / back to the spacecraft |
-| Right stick click | satellite camera screen (above the right controller) |
+| Right stick click | satellite camera on / off: its picture pops out of your **right wrist** when you look at it |
 | Left stick click | orbit path on / off |
 
 - **VR menu.** It opens in front of you, in the main menu's style, with four pages: *Controls*
@@ -157,6 +158,13 @@ Walk around the spacecraft for real, or fly with the **jetpack**.
   blinks amber (red when lost) and the controller buzzes once. `X` turns the pad off and on;
   it stays folded while the VR menu is open. How far the wrist has to turn, the delays and the
   pad's size are on the `VrWristPad` component.
+- **Satellite camera (right wrist).** The right sleeve has a matching wrist computer. While the
+  satellite camera is on (right stick click, or *Views > Sat camera*), its little screen shows
+  the live picture; turn the right wrist towards you like a watch and the picture pops out,
+  about 18 cm across, with how wide the view is, the ground it covers, how far off nadir it
+  points, a cross at the boresight and, when zoomed out, the real 44 km view as a box. Zoom
+  with *Camera zoom in / out* on the VR menu's *Views* page. It replaces the screen that used
+  to float over the right controller and cut through the glove (`VrWristCamera`).
 - **Jetpack.** It speeds up and slows down smoothly and rumbles the controller. You hear a quiet,
   low puff of gas only while the jets change your speed (setting off, stopping, turning);
   gliding at a steady speed is silent. Settings > Jetpack sound turns it off. The flight zone
@@ -176,7 +184,8 @@ its centre at 1.45 m, so you look slightly down at the cameras' side and up at t
   45° wide so you can tell where you are; zoom in as far as the real field of view, about
   5.1° (the two imagers together cover a 44 km wide strip from 500 km). A box in the middle
   marks that real view while you are zoomed out. At the real zoom the picture is soft: the
-  8192-pixel Earth map has about 5 km per pixel, and the real view is 44 km wide.
+  8192-pixel Earth map has about 5 km per pixel, and the real view is 44 km wide. In the
+  headset the picture is on your right wrist (see above).
 - **Whole Earth (`Z`).** The Earth becomes a 1 m globe, north up, with the spacecraft going
   round it and the Moon at its true distance (30 m away on this scale; zoom out with the
   wheel). The orbit height, the Earth, the Moon and the day/night line are to scale. Only the
@@ -389,7 +398,8 @@ EOSAT1/
                     SatelliteView + DeployableJoint, InfoPanel, DesktopControls,
                     DesktopHud (control bar, tooltips, help card),
                     VrRig, VrHands (space gloves), VrMenu (headset menu and messages), VrJetpack,
-                    VrWristPad (the info pad on the left wrist), SpeedSlider,
+                    VrWristPad (the info pad on the left wrist), VrWristCamera (the satellite
+                    camera on the right wrist), SpeedSlider,
                     ViewDirector (satellite camera, whole Earth, panel axes, buttons), OrbitPathView,
                     SpaceReflections (the sky the spacecraft's metal mirrors),
                     HudStyle (the on-screen display's look),

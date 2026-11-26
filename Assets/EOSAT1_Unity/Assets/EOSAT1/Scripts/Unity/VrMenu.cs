@@ -279,11 +279,11 @@ namespace Eosat1
                                 "Stick ← →\nStick ↑ ↓\nStick click\nA\nB\nTrigger\nGrip", h, Color.white, TextAnchor.UpperLeft);
             rk.lineSpacing = spacing;
             TextMesh ra = Label("Right Actions", p, new Vector3(0.175f, 0.108f, 0f),
-                                "turn left / right\njetpack up / down\nsatellite camera screen\nopen next solar panel\nopen the antenna\nbody axes on / off\nwhole Earth view",
+                                "turn left / right\njetpack up / down\nsatellite camera on / off\nopen next solar panel\nopen the antenna\nbody axes on / off\nwhole Earth view",
                                 h, ActionText, TextAnchor.UpperLeft);
             ra.lineSpacing = spacing;
             Label("Tip", p, new Vector3(0f, -0.128f, 0f),
-                  "Info pad: turn your left wrist towards you, as if checking a watch.\n" +
+                  "Look at your wrists like a watch: left = info pad, right = satellite camera (once it is on).\n" +
                   "Walk around for real, or fly with the jetpack: up to 6 m from the satellite, and above and below it.\n" +
                   "A and B also free a jam.  The other pages have a button for everything the computer can do.",
                   0.0165f, TextDim, TextAnchor.MiddleCenter);
