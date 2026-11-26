@@ -25,8 +25,9 @@ will reuse.
    about 1980–4000 s, 25° roll to image at 4300–4800 s.
 
 > The C# is checked outside Unity, not inside Unity itself: most of it was compiled against
-> stand-ins for Unity's API, and the wrist info pad, the quieter jetpack and the new settings
-> were checked by hand only. If the Console shows an error, paste it to me.
+> stand-ins for Unity's API, and the wrist info pad, the quieter jetpack, the new settings, the
+> laptop controls during VR and the new VR menu pages were checked by hand only. If the Console
+> shows an error, paste it to me.
 
 **Updating from an earlier version:** copy the new files over the old ones, then use
 **EOSAT-1 > Reset Materials and Rebuild** (it makes the new spacecraft materials and
@@ -109,7 +110,8 @@ panel, the Views panel with the satellite camera's corner picture, the speed bar
 card. A second person can click any button or press any key to run the simulation for the
 person in the headset: pause, change the speed, open the panels, point the satellite, switch
 views, test a fault or go back to the main menu. Only the camera belongs to the headset, so
-dragging and scrolling don't move the view. The laptop's status panel (`H`) and the headset's
+dragging and scrolling don't move the view; `V` and `F` move the person in the headset to the
+same viewpoints instead. The laptop's status panel (`H`) and the headset's
 info pad (`X`) are switched separately. In the Unity editor, click the Game view once so it
 gets the keyboard.
 
@@ -124,17 +126,26 @@ Walk around the spacecraft for real, or fly with the **jetpack**.
 | Right stick | left/right snap turn, up/down jetpack up / down |
 | `A` / `B` | open the next panel / the antenna (or free a jam) |
 | **Left wrist** | turn it towards you, as if checking a watch: **the info pad** pops out of it |
-| `X` / `Y` | info pad on / off / time 1× → 10× → 60× |
+| `X` / `Y` | info pad on / off / next speed: the computer's steps, 0.5× → 1× → 2× → 5× → 10× → 30× → 60× → 120× → 300×, then round again |
 | Left grip | pause |
 | Right / left trigger | body axes / camera line (in the VR menu: press the button you point at) |
 | Right grip | whole Earth / back to the spacecraft |
 | Right stick click | satellite camera screen (above the right controller) |
 | Left stick click | orbit path on / off |
 
-- **VR menu.** It opens in front of you, in the main menu's style, with three pages: *Controls*
-  (both controllers explained), *Satellite* (open / fold, pointing, jams) and *Time & views*.
-  Point a controller at a button and pull the trigger. The bottom row has *Back to start*,
-  *Main menu* and *Close*. A reminder of the MENU button shows for the first seconds.
+- **VR menu.** It opens in front of you, in the main menu's style, with four pages: *Controls*
+  (both controllers explained), *Satellite* (open / fold, pointing, jams, and the data source,
+  like the computer's `M`), *Time* (pause, slower / faster, skip, start again, and one button
+  for each of the computer's nine speeds) and *Views* (satellite camera and its zoom like `[`
+  `]`, whole Earth, orbit path, helper lines, the view frame like `L`, the computer's viewpoints
+  like `V` / `F`, and the info pad). With the controllers it does everything the computer's keys
+  and buttons do. Point a controller at a button and pull the trigger. The bottom row has *Back
+  to start*, *Main menu* and *Close*. A reminder of the MENU button shows for the first seconds.
+- **Viewpoints.** *Next viewpoint* and *First viewpoint* put you where the computer's camera
+  angles are (behind and below like the reference picture, from the side, from above, from
+  below, from ahead, wide), turned to face the spacecraft; the far ones come in a little so you
+  stay inside the jetpack's flight zone. `V` and `F` on the laptop do the same for whoever is in
+  the headset.
 - **Space gloves.** Your hands are suit gloves (built in code, `VrHands`): the fingers close
   with the grip, the index finger with the trigger, the thumb when it rests on a button.
 - **Info pad (left wrist).** A small wrist computer sits on the left sleeve, with four lights

@@ -5,7 +5,8 @@
 // Left stick   fly forwards / back / sideways   Right stick  left/right snap turn,
 //                                                             up/down jetpack up / down
 // A            next solar panel / free its jam  B            antenna / free its jam
-// X            info pad on/off                  Y            time 1x -> 10x -> 60x
+// X            info pad on/off                  Y            next speed: the computer's steps,
+//                                                            0.5x ... 300x, then round again
 // Left grip    pause                            MENU (left)  the VR menu: every control
 //                                                            explained, and a button for each
 // Right trigger body axes                       Left trigger camera line
@@ -13,6 +14,8 @@
 // Right grip   whole Earth / back               Right stick click  satellite camera screen
 // Left stick click  orbit path on/off
 // Left wrist  turn it towards you, like checking a watch: the info pad pops out of it
+// The VR menu has a button for everything else the computer can do (every speed, the
+// computer's viewpoints, view frame, data source, satellite camera zoom).
 // Commands only act in Sandbox mode; with the simulator they come from mission control.
 //
 // In the simulation the rig also carries space gloves (VrHands), the VR menu and messages
@@ -89,6 +92,7 @@ namespace Eosat1
         bool poseKnown, poseIsGrip;
         bool prevA, prevB, prevX, prevY, prevTrigR, prevTrigL, prevMenu, prevGripL;
         bool prevGripR, prevStickR, prevStickL;
+        int viewpoint = -1;
 
         void Start()
         {
@@ -303,6 +307,57 @@ namespace Eosat1
             if (jetpack != null) jetpack.Stop();
         }
 
+        /// <summary>The computer's next preset view (its V key), as a place to stand.</summary>
+        public void NextViewpoint()
+        {
+            GoToViewpoint(viewpoint + 1);
+        }
+
+        /// <summary>The computer's first preset view (its F key): the angle of the project's reference picture.</summary>
+        public void FirstViewpoint()
+        {
+            GoToViewpoint(0);
+        }
+
+        /// <summary>
+        /// Stand where the computer's camera would be for preset view 'index' (DesktopControls),
+        /// turned to face the spacecraft; your own head still looks up and down. Kept inside the
+        /// jetpack's flight zone, clear of its edge grid, so the far views come in a little closer.
+        /// </summary>
+        public void GoToViewpoint(int index)
+        {
+            if (head == null || app == null) return;
+            int count = DesktopControls.ViewCount;
+            if (count <= 0) return;
+            viewpoint = ((index % count) + count) % count;
+            Vector3 preset = DesktopControls.ViewPreset(viewpoint);
+            Vector3 centre = app.space != null ? (app.space.satellite != null ? app.space.satellite.position : app.space.transform.position)
+                                               : transform.position;
+            Vector3 eye = centre - Quaternion.Euler(preset.y, preset.x, 0f) * Vector3.forward * preset.z;
+            if (jetpack != null)
+            {
+                Vector3 flat = eye - centre;
+                flat.y = 0f;
+                float maxRadius = Mathf.Max(1f, jetpack.flightRadius - jetpack.edgeWarning - 0.2f);
+                if (flat.magnitude > maxRadius) eye = new Vector3(centre.x, eye.y, centre.z) + flat.normalized * maxRadius;
+            }
+
+            // turn the rig so the head faces the spacecraft, then move it so the head lands on 'eye'
+            Vector3 headLocal = transform.InverseTransformPoint(head.position);
+            Vector3 headForward = transform.InverseTransformDirection(head.forward);
+            float headYaw = Mathf.Atan2(headForward.x, headForward.z) * Mathf.Rad2Deg;
+            Vector3 toCentre = centre - eye;
+            toCentre.y = 0f;
+            float wantYaw = toCentre.sqrMagnitude > 1e-6f ? Mathf.Atan2(toCentre.x, toCentre.z) * Mathf.Rad2Deg : preset.x;
+            Quaternion turn = Quaternion.Euler(0f, wantYaw - headYaw, 0f);
+            Vector3 position = eye - turn * headLocal;
+            if (jetpack != null)
+                position.y = Mathf.Clamp(position.y, jetpack.flightFloor + jetpack.edgeWarning, jetpack.flightCeiling - jetpack.edgeWarning);
+            transform.SetPositionAndRotation(position, turn);
+            if (jetpack != null) jetpack.Stop();
+            app.Say("Viewpoint " + (viewpoint + 1) + " of " + count + ": " + DesktopControls.ViewName(viewpoint));
+        }
+
         void Locomotion()
         {
             InputDevice left = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
@@ -399,7 +454,7 @@ namespace Eosat1
                         app.Say(infoPanel.showInHeadset ? "Status panel: on your left controller" : "Status panel hidden");
                 }
             }
-            if (y && app != null) app.CycleSpeedCoarse();
+            if (y && app != null) app.CycleSpeed();
             if (gripL && app != null) app.TogglePause();
             if (gripR && views != null && !SpeedSlider.HoldsRightGrip) views.ToggleOverview();   // not while sliding the speed bar
             if (stickR && views != null) views.CycleSatCamera();

@@ -1,6 +1,7 @@
 // EOSAT-1 VR - mouse and keyboard, for working without a headset (and for the
 // instructor's screen). Orbits the camera around the spacecraft. While a headset is
-// active the headset moves the camera, but the keyboard shortcuts still work.
+// active the headset moves the camera, but the keyboard shortcuts still work, and V / F
+// move the person in the headset to the same viewpoints (VrRig.GoToViewpoint).
 using Eosat1.Core;
 using UnityEngine;
 
@@ -32,6 +33,32 @@ namespace Eosat1
             new Vector3(180f, 10f, 3.6f),   // from ahead
             new Vector3(35f, 22f, 8.0f),    // wide
         };
+        static readonly string[] ViewNames =
+        {
+            "like the reference picture, from behind and below",
+            "behind and to the left",
+            "from the side",
+            "from above",
+            "from below, under the two cameras",
+            "from ahead",
+            "wide",
+        };
+
+        /// <summary>How many preset views V steps through.</summary>
+        public static int ViewCount { get { return Views.Length; } }
+
+        /// <summary>Preset view i: x = yaw, y = pitch (degrees, the camera's), z = distance from the spacecraft (m).</summary>
+        public static Vector3 ViewPreset(int i)
+        {
+            return Views[((i % Views.Length) + Views.Length) % Views.Length];
+        }
+
+        public static string ViewName(int i)
+        {
+            return ViewNames[((i % ViewNames.Length) + ViewNames.Length) % ViewNames.Length];
+        }
+
+        VrRig rig;
 
         float yaw, pitch;
         int view;
@@ -60,6 +87,7 @@ namespace Eosat1
         void Start()
         {
             SetView(0);
+            rig = FindAnyObjectByType<VrRig>();
         }
 
         void SetView(int i)
@@ -112,6 +140,13 @@ namespace Eosat1
                 cameraTransform.position = target.position - rot * Vector3.forward * distance;
                 cameraTransform.rotation = rot;
                 }
+            }
+
+            // with someone in the headset, V and F take them to the same viewpoints
+            if (UnityEngine.XR.XRSettings.isDeviceActive && rig != null && !HudStyle.ModalActive)
+            {
+                if (InputShim.Down(KeyCode.V)) rig.NextViewpoint();
+                if (InputShim.Down(KeyCode.F)) rig.FirstViewpoint();
             }
 
             // back to the main menu (when the menu scene is in the build list)

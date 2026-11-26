@@ -240,15 +240,14 @@ namespace Eosat1
             Say("Speed x" + Speed);
         }
 
-        /// <summary>VR-friendly: 1x -> 10x -> 60x -> 1x.</summary>
-        public void CycleSpeedCoarse()
+        /// <summary>
+        /// The headset's Y button: the next speed up, through the same steps as the computer's
+        /// - and = keys and speed bar (0.5x ... 300x), then round again from the slowest.
+        /// </summary>
+        public void CycleSpeed()
         {
-            float s = Speed;
-            float next = s < 9f ? 10f : (s < 59f ? 60f : 1f);
-            int best = 0;
-            for (int i = 0; i < speedSteps.Length; i++)
-                if (Mathf.Abs(speedSteps[i] - next) < Mathf.Abs(speedSteps[best] - next)) best = i;
-            SetSpeedIndex(best);
+            if (speedSteps == null || speedSteps.Length == 0) return;
+            SetSpeedIndex(speedIndex + 1 >= speedSteps.Length ? 0 : speedIndex + 1);
         }
 
         public void TogglePause()
