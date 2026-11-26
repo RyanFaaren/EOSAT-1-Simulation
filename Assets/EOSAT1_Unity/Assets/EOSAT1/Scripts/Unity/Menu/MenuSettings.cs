@@ -207,6 +207,7 @@ namespace Eosat1
             if (app.infoPanel != null)
             {
                 app.infoPanel.showOnScreen = ShowInfoPanel;
+                app.infoPanel.showInHeadset = ShowInfoPanel;
                 app.infoPanel.showHelp = ShowHints;
             }
         }
