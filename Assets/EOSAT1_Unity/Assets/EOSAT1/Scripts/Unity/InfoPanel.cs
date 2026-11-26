@@ -1,7 +1,8 @@
 // EOSAT-1 VR - a small panel of text that answers the four questions from the course
 // slides at a glance: Is it tumbling? Is the camera facing Earth? Are the wings in the
 // sun? Did the antenna come out? Plus where it is, the time, and the link health.
-// Desktop: drawn on screen (H toggles). Headset: a panel on the left controller (X toggles).
+// Desktop: drawn on screen (H toggles). Headset: the info pad that pops out of the left
+// wrist when you look at it like a watch (VrWristPad draws it from the data below; X toggles).
 // The buttons and the key list are DesktopHud's (desktop) and VrMenu's (headset).
 using System;
 using System.Collections.Generic;
@@ -15,9 +16,11 @@ namespace Eosat1
     public sealed class InfoPanel : MonoBehaviour
     {
         public EosatApp app;
-        [Tooltip("World-space text for the headset (shown on the left controller).")]
+        [Tooltip("The old headset panel on the left controller. Hidden while the wrist info pad (VrWristPad) is in use.")]
         public TextMesh worldText;
         public GameObject worldPanel;
+        /// <summary>Set by VrWristPad: the info pad on the wrist replaces the panel on the left controller.</summary>
+        [NonSerialized] public bool wristPadTakesOver;
         public bool showOnScreen = true;
         [Tooltip("Desktop: show the control bar along the bottom of the screen (DesktopHud draws it; Tab toggles).")]
         public bool showHelp = true;
@@ -30,9 +33,11 @@ namespace Eosat1
         float nextRefresh;
         readonly List<string> rowLabels = new List<string>();
         readonly List<string> rowValues = new List<string>();
+        readonly List<bool> rowQuestion = new List<bool>();
         string rowLabel = "";
+        bool rowIsQuestion;
         int rowStart = -1;
-        string headerTime = "", headerChip = "";
+        string headerTime = "", headerChip = "", sourceShort = "";
 
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -61,20 +66,67 @@ namespace Eosat1
         }
 
         // set by Build: the weak-connection warning, if there is one
-        string linkWarning;
+        string linkWarning, linkWarningShort;
         bool linkLost;
+
+        // ------------------------------------------------------------------ for the headset's info pad (VrWristPad)
+        public enum AnswerLevel { Unknown, Good, Warn, Bad }
+
+        /// <summary>One of slide 17's four questions, answered in a word or two.</summary>
+        public sealed class Answer
+        {
+            public readonly string Question;
+            public string Value = "?";
+            public string Detail = "";
+            public AnswerLevel Level = AnswerLevel.Unknown;
+
+            public Answer(string question)
+            {
+                Question = question;
+            }
+        }
+
+        /// <summary>Tumbling? Camera on Earth? Panels in sun? Antenna out? (in that order), rebuilt with the panel.</summary>
+        public readonly Answer[] Answers =
+        {
+            new Answer("TUMBLING?"), new Answer("CAMERA ON EARTH?"), new Answer("PANELS IN SUN?"), new Answer("ANTENNA OUT?"),
+        };
+
+        public string HeaderTime { get { return headerTime; } }
+        public string HeaderChip { get { return headerChip; } }
+        /// <summary>The data source in a few words: the Source row without the link statistics.</summary>
+        public string SourceShort { get { return sourceShort; } }
+        /// <summary>The weak-link warning in a few words, or null while the link is fine.</summary>
+        public string LinkWarningShort { get { return linkWarningShort; } }
+        public bool HasLinkWarning { get { return linkWarning != null; } }
+        public bool LinkLost { get { return linkLost; } }
+        public int RowCount { get { return rowLabels.Count; } }
+        public string RowLabel(int i) { return rowLabels[i]; }
+        public string RowValue(int i) { return rowValues[i]; }
+        /// <summary>True for the four rows that the Answers above also cover.</summary>
+        public bool RowIsQuestion(int i) { return rowQuestion[i]; }
+        /// <summary>Goes up by one every time the text is rebuilt (four times a second).</summary>
+        public int Version { get; private set; }
+
+        static void SetAnswer(Answer a, AnswerLevel level, string value, string detail)
+        {
+            a.Level = level;
+            a.Value = value;
+            a.Detail = detail;
+        }
 
         void Update()
         {
             bool headset = UnityEngine.XR.XRSettings.isDeviceActive;
             // in the headset the panel on the left controller comes up by itself when the link is weak
-            bool wantPanel = headset && (showOnScreen || linkWarning != null);
+            // (unless the wrist info pad has taken over: then the wrist screen blinks instead)
+            bool wantPanel = headset && !wristPadTakesOver && (showOnScreen || linkWarning != null);
             if (worldPanel != null && worldPanel.activeSelf != wantPanel) worldPanel.SetActive(wantPanel);
             Visible = showOnScreen;
             if (Time.unscaledTime < nextRefresh || app == null) return;
             nextRefresh = Time.unscaledTime + refreshInterval;
             Build(app);
-            if (worldText != null && headset) worldText.text = text;
+            if (worldText != null && headset && !wristPadTakesOver) worldText.text = text;
         }
 
         void OnGUI()
@@ -123,6 +175,7 @@ namespace Eosat1
         void UpdateLinkWarning(EosatApp a, DisplayState s)
         {
             linkWarning = null;
+            linkWarningShort = null;
             linkLost = false;
             if (a.ActiveFeed != FeedKind.Tcp || !s.Valid || s.DataAge < 2.5) return;
             TcpFeedClient l = a.Link;
@@ -133,6 +186,8 @@ namespace Eosat1
                         : s.Predicting ? "showing a prediction from the last data"
                         : "waiting for data";
             linkWarning = head + "  -  no data for " + age + "  -  " + what;
+            linkWarningShort = (linkLost ? "LOST" : "WEAK") + "  no data for " + age
+                               + (s.PredictionCapped ? ", holding" : s.Predicting ? ", predicting" : "");
         }
 
         /// <summary>The status panel, top left: a heading, the time, then one row per question.</summary>
@@ -182,10 +237,11 @@ namespace Eosat1
         }
 
         // rows for the on-screen panel are cut out of the same text the headset panel shows
-        void BeginRow(string label, string paddedLabel)
+        void BeginRow(string label, string paddedLabel, bool question = false)
         {
             EndRow();
             rowLabel = label;
+            rowIsQuestion = question;
             sb.Append(paddedLabel);
             rowStart = sb.Length;
         }
@@ -195,6 +251,7 @@ namespace Eosat1
             if (rowStart < 0) return;
             rowLabels.Add(rowLabel);
             rowValues.Add(sb.ToString(rowStart, sb.Length - rowStart).TrimEnd('\n'));
+            rowQuestion.Add(rowIsQuestion);
             rowStart = -1;
         }
 
@@ -202,10 +259,15 @@ namespace Eosat1
         void Build(EosatApp a)
         {
             DisplayState s = a.State;
+            Version++;
             sb.Length = 0;
             rowLabels.Clear();
             rowValues.Clear();
+            rowQuestion.Clear();
             rowStart = -1;
+            sourceShort = "";
+            for (int i = 0; i < Answers.Length; i++)
+                SetAnswer(Answers[i], AnswerLevel.Unknown, "?", s.Valid ? "" : "waiting for data");
             headerTime = s.Valid ? AstroTime.ToIso(s.SimTime).Replace('T', ' ').Replace("Z", " UTC") : "waiting for data";
             if (a.CanControlTime) headerChip = a.paused ? "PAUSED" : "x" + a.Speed.ToString("0.##", Inv);
             else if (s.Valid && s.Frozen) headerChip = "FROZEN";
@@ -229,33 +291,42 @@ namespace Eosat1
 
             // Is it tumbling?
             double rate = s.BodyRateDegS;
-            BeginRow("Tumbling?", "Tumbling?        ");
+            BeginRow("Tumbling?", "Tumbling?        ", true);
             if (double.IsNaN(rate)) sb.Append("? (rate unknown at this data speed)");
             else if (rate > 0.5) sb.Append(Bad("YES")).Append("  ").Append(rate.ToString("0.0", Inv)).Append(" deg/s");
             else sb.Append(Good("no")).Append("  ").Append(rate.ToString("0.00", Inv)).Append(" deg/s");
             sb.Append('\n');
+            if (double.IsNaN(rate)) SetAnswer(Answers[0], AnswerLevel.Unknown, "?", "rate unknown");
+            else if (rate > 0.5) SetAnswer(Answers[0], AnswerLevel.Bad, "YES", rate.ToString("0.0", Inv) + "\u00b0/s");
+            else SetAnswer(Answers[0], AnswerLevel.Good, "NO", rate.ToString("0.00", Inv) + "\u00b0/s");
 
             // Is the camera facing Earth?
             Vec3d camEci = s.QBodyToEci.Rotate(Vec3d.UnitZ);
             double offNadir = Vec3d.Angle(camEci, -s.PosEciKm) * MathUtil.Rad2Deg;
-            BeginRow("Camera on Earth?", "Camera on Earth? ");
+            BeginRow("Camera on Earth?", "Camera on Earth? ", true);
             if (offNadir < 3.0) sb.Append(Good("YES"));
             else if (offNadir < 68.0) sb.Append(Warn("off-pointed"));
             else sb.Append(Bad("NO"));
             sb.Append("  ").Append(offNadir.ToString("0.0", Inv)).Append(" deg off nadir\n");
+            string offText = offNadir.ToString("0.0", Inv) + "\u00b0 off nadir";
+            if (offNadir < 3.0) SetAnswer(Answers[1], AnswerLevel.Good, "YES", offText);
+            else if (offNadir < 68.0) SetAnswer(Answers[1], AnswerLevel.Warn, "OFF-POINTED", offText);
+            else SetAnswer(Answers[1], AnswerLevel.Bad, "NO", offText);
 
             // Are the wings in the sun?
             Vec3d sun = s.HasSun ? s.SunDirEci : Vec3d.Zero;
             bool eclipse = a.space != null ? a.space.Illumination < 0.5 : s.InEclipse;
-            BeginRow("Panels in sun?", "Panels in sun?   ");
+            BeginRow("Panels in sun?", "Panels in sun?   ", true);
             if (eclipse) sb.Append(Warn("ECLIPSE")).Append(" (Earth's shadow)  ");
-            AppendWing("-Y", s.WingMinusY, -1, s, sun, eclipse);
+            double litMy = AppendWing("-Y", s.WingMinusY, -1, s, sun, eclipse);
             sb.Append("  ");
-            AppendWing("+Y", s.WingPlusY, +1, s, sun, eclipse);
+            double litPy = AppendWing("+Y", s.WingPlusY, +1, s, sun, eclipse);
             sb.Append('\n');
+            AnswerPanels(eclipse, s.HasSun, s.WingMinusY, litMy, s.WingPlusY, litPy);
 
             // Did the antenna come out?
-            BeginRow("Antenna out?", "Antenna out?     ");
+            BeginRow("Antenna out?", "Antenna out?     ", true);
+            AnswerAntenna(s);
             if (!s.Antenna.Present) sb.Append("?");
             else if (s.Antenna.State == DeployState.Jammed) sb.Append(Bad("JAMMED"));
             else if (s.Antenna.State == DeployState.Deployed) sb.Append(Good("DEPLOYED"));
@@ -389,23 +460,32 @@ namespace Eosat1
             {
                 case FeedKind.Sandbox:
                     sb.Append("SANDBOX (built-in simulator, takes commands)\n");
+                    sourceShort = "SANDBOX  built-in simulator";
                     break;
                 case FeedKind.Replay:
                     sb.Append("REPLAY");
+                    sourceShort = "REPLAY";
                     if (a.Replay != null)
+                    {
                         sb.Append("  frame ").Append(a.Replay.Cursor).Append('/').Append(a.Replay.Count);
+                        sourceShort += "  frame " + a.Replay.Cursor + "/" + a.Replay.Count;
+                    }
                     AppendTimelineStats(a.Timeline);
                     sb.Append('\n');
                     break;
                 case FeedKind.Tcp:
                     TcpFeedClient l = a.Link;
-                    sb.Append("LIVE ").Append(l != null ? l.ActiveEndpoint : TcpFeedClient.Describe(a.tcpHost, a.tcpPort));
+                    string endpoint = l != null ? l.ActiveEndpoint : TcpFeedClient.Describe(a.tcpHost, a.tcpPort);
+                    string linkState;
+                    if (l == null) linkState = Bad("stopped");
+                    else if (!l.Connected) linkState = Bad(s.Predicting ? "not connected - predicting" : "not connected");
+                    else if (s.Valid && s.DataAge > 2.5) linkState = Warn((s.Predicting ? "WEAK - predicting, " : "STALE ") + s.DataAge.ToString("0", Inv) + " s");
+                    else linkState = Good("connected");
+                    sourceShort = "LIVE " + endpoint + "  " + linkState;
+                    sb.Append("LIVE ").Append(endpoint);
                     if (l != null && l.Connected && l.OnPowerChannel) sb.Append(" (with power)");
                     sb.Append("  ");
-                    if (l == null) sb.Append(Bad("stopped"));
-                    else if (!l.Connected) sb.Append(Bad(s.Predicting ? "not connected - predicting" : "not connected"));
-                    else if (s.Valid && s.DataAge > 2.5) sb.Append(Warn((s.Predicting ? "WEAK - predicting, " : "STALE ") + s.DataAge.ToString("0", Inv) + " s"));
-                    else sb.Append(Good("connected"));
+                    sb.Append(linkState);
                     if (l != null)
                     {
                         sb.Append("  seq ").Append(l.LastSeq).Append("  skipped ").Append(l.ParseErrors);
@@ -425,26 +505,81 @@ namespace Eosat1
             if (t.ForwardJumps > 0) sb.Append("  jumps ").Append(t.ForwardJumps);
         }
 
-        void AppendWing(string name, DeployInfo w, int side, DisplayState s, Vec3d sunEci, bool eclipse)
+        /// <returns>How squarely the cells face the Sun (a cosine), or NaN when that isn't known or it's in eclipse.</returns>
+        double AppendWing(string name, DeployInfo w, int side, DisplayState s, Vec3d sunEci, bool eclipse)
         {
             sb.Append(name).Append(' ');
             if (!w.Present)
             {
                 sb.Append('?');
-                return;
+                return double.NaN;
             }
             if (w.State == DeployState.Stowed) sb.Append("stowed");
             else if (w.State == DeployState.Deployed) sb.Append("out");
             else if (w.State == DeployState.Jammed)
                 sb.Append(Bad("JAMMED")).Append(" at ").Append(Math.Round(w.EffectiveFraction * 100).ToString(Inv)).Append('%');
             else sb.Append(w.Label.ToLowerInvariant());
-            if (eclipse || !s.HasSun) return;
+            if (eclipse || !s.HasSun) return double.NaN;
             Vec3d cellNormal;
             if (app == null || app.satelliteView == null || !app.satelliteView.TryGetCellNormalBody(side, out cellNormal))
                 cellNormal = WingCellNormalBody(side, w.EffectiveFraction);
             double cosInc = Vec3d.Dot(s.QBodyToEci.Rotate(cellNormal), sunEci);
             if (cosInc > 0.05) sb.Append(' ').Append(Good("lit " + Math.Round(cosInc * 100).ToString(Inv) + "%"));
             else sb.Append(' ').Append(Warn("cells face away"));
+            return cosInc;
+        }
+
+        void AnswerPanels(bool eclipse, bool hasSun, DeployInfo my, double litMy, DeployInfo py, double litPy)
+        {
+            Answer a = Answers[2];
+            string detail = "-Y " + WingWord(my, litMy) + "   +Y " + WingWord(py, litPy);
+            bool jammed = (my.Present && my.State == DeployState.Jammed) || (py.Present && py.State == DeployState.Jammed);
+            if (jammed) SetAnswer(a, AnswerLevel.Bad, "JAMMED", detail);
+            else if (eclipse) SetAnswer(a, AnswerLevel.Warn, "ECLIPSE", "in Earth's shadow");
+            else if (!hasSun || (double.IsNaN(litMy) && double.IsNaN(litPy))) SetAnswer(a, AnswerLevel.Unknown, "?", "no Sun direction");
+            else
+            {
+                int known = 0, lit = 0;
+                if (!double.IsNaN(litMy))
+                {
+                    known++;
+                    if (litMy > 0.05) lit++;
+                }
+                if (!double.IsNaN(litPy))
+                {
+                    known++;
+                    if (litPy > 0.05) lit++;
+                }
+                if (lit == known) SetAnswer(a, AnswerLevel.Good, "YES", detail);
+                else if (lit == 0) SetAnswer(a, AnswerLevel.Bad, "NO", detail);
+                else SetAnswer(a, AnswerLevel.Warn, "PARTLY", detail);
+            }
+        }
+
+        static string WingWord(DeployInfo w, double lit)
+        {
+            if (!w.Present) return "?";
+            if (w.State == DeployState.Jammed) return "jammed";
+            if (double.IsNaN(lit))
+                return w.State == DeployState.Stowed ? "stowed" : w.State == DeployState.Deployed ? "out" : "?";
+            return lit > 0.05 ? Math.Round(lit * 100).ToString(Inv) + "%" : "away";
+        }
+
+        void AnswerAntenna(DisplayState s)
+        {
+            Answer a = Answers[3];
+            DeployInfo ant = s.Antenna;
+            string pct = Math.Round(ant.EffectiveFraction * 100).ToString(Inv) + "%";
+            if (!ant.Present || ant.State == DeployState.Unknown) SetAnswer(a, AnswerLevel.Unknown, "?", "no data");
+            else if (ant.State == DeployState.Jammed) SetAnswer(a, AnswerLevel.Bad, "JAMMED", "stuck at " + pct);
+            else if (ant.State == DeployState.Deployed) SetAnswer(a, AnswerLevel.Good, "YES", "deployed");
+            else if (ant.State == DeployState.Deploying) SetAnswer(a, AnswerLevel.Warn, "OPENING", pct + " out");
+            else SetAnswer(a, AnswerLevel.Warn, "NO", "stowed");
+            if (s.AntennaSensorDisagrees)
+            {
+                a.Detail = "sensor says " + s.AntennaSensor;
+                if (a.Level == AnswerLevel.Good) a.Level = AnswerLevel.Warn;
+            }
         }
 
         /// <summary>

@@ -24,8 +24,9 @@ will reuse.
    out: antenna at 600 s, turn to face Earth at 900–1200 s, panels at 1300–1430 s, eclipse
    about 1980–4000 s, 25° roll to image at 4300–4800 s.
 
-> The C# has been compiled outside Unity against stand-ins for Unity's API, which catches
-> most mistakes, but not inside Unity itself. If the Console shows an error, paste it to me.
+> The C# is checked outside Unity, not inside Unity itself: most of it was compiled against
+> stand-ins for Unity's API, and the wrist info pad, the quieter jetpack and the new settings
+> were checked by hand only. If the Console shows an error, paste it to me.
 
 **Updating from an earlier version:** copy the new files over the old ones, then use
 **EOSAT-1 > Reset Materials and Rebuild** (it makes the new spacecraft materials and
@@ -47,8 +48,9 @@ back of a mission control room, facing three wall screens.
 
 **Settings** are remembered between runs and apply when you start from the menu: data source
 (Sandbox / Replay / Live link), time speed at start (1x / 10x / 60x), info panel and control
-hints shown or hidden, and the headset's snap-turn angle. `eosat1_link.json` and the
-`-eosat...` command-line options still override them.
+hints shown or hidden, the headset's snap-turn angle, the satellite model (**EOS SAT-1**, the
+default, or the course ICD's 6U CubeSat) and the jetpack sound (on / off). `eosat1_link.json`
+and the `-eosat...` command-line options still override them.
 
 The room is built by code when the scene starts (`Scripts/Unity/Menu`), so the scene holds
 one object, **Mission Control Menu**; its Inspector has the title, subtitle and accent colour.
@@ -111,7 +113,8 @@ Walk around the spacecraft for real, or fly with the **jetpack**.
 | Left stick | jetpack: fly forwards / back / sideways |
 | Right stick | left/right snap turn, up/down jetpack up / down |
 | `A` / `B` | open the next panel / the antenna (or free a jam) |
-| `X` / `Y` | status panel on the left controller / time 1× → 10× → 60× |
+| **Left wrist** | turn it towards you, as if checking a watch: **the info pad** pops out of it |
+| `X` / `Y` | info pad on / off / time 1× → 10× → 60× |
 | Left grip | pause |
 | Right / left trigger | body axes / camera line (in the VR menu: press the button you point at) |
 | Right grip | whole Earth / back to the spacecraft |
@@ -124,11 +127,22 @@ Walk around the spacecraft for real, or fly with the **jetpack**.
   *Main menu* and *Close*. A reminder of the MENU button shows for the first seconds.
 - **Space gloves.** Your hands are suit gloves (built in code, `VrHands`): the fingers close
   with the grip, the index finger with the trigger, the thumb when it rests on a button.
-- **Jetpack.** It speeds up and slows down smoothly, hisses, and rumbles the controller. The
-  flight zone is a cylinder around the spacecraft: 6 m in radius, from 3 m below your
-  starting height to 3.5 m above. Near the edge a cyan grid appears and the jets stop there
-  (walking is never blocked). A line of text shows your height against the satellite. The
-  numbers are on the `VrJetpack` component.
+- **Info pad (left wrist).** A small wrist computer sits on the left sleeve, with four lights
+  for slide 17's four questions. Turn the wrist towards your face, as if checking a watch, and
+  the pad pops out of it, upright in front of the wrist so the glove never covers it: the four
+  questions as lit tiles, the time, the data source and position, and the speed bar along the
+  bottom (point the right controller at it and hold the right grip to slide). Lower the arm or
+  turn the wrist away and it folds back in. While the live link is weak, the wrist screen's rim
+  blinks amber (red when lost) and the controller buzzes once. `X` turns the pad off and on;
+  it stays folded while the VR menu is open. How far the wrist has to turn, the delays and the
+  pad's size are on the `VrWristPad` component.
+- **Jetpack.** It speeds up and slows down smoothly and rumbles the controller. You hear a quiet,
+  low puff of gas only while the jets change your speed (setting off, stopping, turning);
+  gliding at a steady speed is silent. Settings > Jetpack sound turns it off. The flight zone
+  is a cylinder around the spacecraft: 6 m in radius, from 3 m below your starting height to
+  3.5 m above. Near the edge a cyan grid appears and the jets stop there (walking is never
+  blocked). A line of text shows your height against the satellite. The numbers are on the
+  `VrJetpack` component.
 - **Messages.** What each command did is shown low in front of you for a few seconds.
 
 You start about 3 m behind and to the left of the spacecraft, facing it. It floats with
@@ -168,9 +182,15 @@ other. These views are built when the scene starts, so there is nothing to rebui
 *Is it tumbling?* (body rate), *Is the camera facing Earth?* (degrees off nadir),
 *Are the wings in the sun?* (eclipse, and how squarely each panel's cells face the Sun,
 read from the model itself), *Did the antenna come out?* — plus the time, where it is
-(latitude/longitude) and the link health.
+(latitude/longitude) and the link health. On the computer it is the status panel at the top
+left (`H`); in the headset it is the info pad on the left wrist, where each question gets a
+green, amber or red light and a one-word answer.
 
 ## The spacecraft model
+
+This EOS SAT-1 is the model drawn by default. Settings > Satellite model can draw the course
+ICD's 6U CubeSat instead (`CubeSatModel`, built at run time with the same materials); the
+EOS SAT-1 parts then stay in the scene, hidden.
 
 | | |
 |---|---|
@@ -348,6 +368,7 @@ EOSAT1/
                     SatelliteView + DeployableJoint, InfoPanel, DesktopControls,
                     DesktopHud (control bar, tooltips, help card),
                     VrRig, VrHands (space gloves), VrMenu (headset menu and messages), VrJetpack,
+                    VrWristPad (the info pad on the left wrist), SpeedSlider,
                     ViewDirector (satellite camera, whole Earth, panel axes, buttons), OrbitPathView,
                     SpaceReflections (the sky the spacecraft's metal mirrors),
                     HudStyle (the on-screen display's look),
@@ -396,6 +417,10 @@ Tools/
 - **Gloves sit at an odd angle on the controllers**: select *Player Rig* while playing and turn
   them with *Left Tweak* / *Right Tweak* on the `Vr Hands` component, then tell me the numbers
   (or untick *Space Gloves* on `Vr Rig` to get the plain blocks back).
+- **The info pad opens too easily, or is hard to open**: select *Player Rig* while playing and
+  change *Open Facing* (how squarely the wrist must face you) and *Open View Angle* on the
+  `Vr Wrist Pad` component; *Pad Scale* makes the pad bigger or smaller. Tell me the numbers
+  that feel right and I'll make them the defaults.
 - **A message about missing files after building**: the `Textures` and `Data` folders must
   sit next to `Scripts` inside the EOSAT1 folder.
 - **Pink materials**: the scene was built before URP was active, or with another pipeline.

@@ -4,8 +4,8 @@
 // part-way and shaking, a pulsing red halo, and a floating label.
 // A solar panel can be JAMMED too: it stops where the data says, shakes on its hinge,
 // and gets its own "SOLAR PANEL JAMMED" label.
-// By default the course's 6U CubeSat is drawn instead (CubeSatModel, ICD smo-vr/1 issue 2);
-// Settings > Satellite model switches back to this EOS SAT-1 model.
+// This EOS SAT-1 model is the one drawn by default. Settings > Satellite model can draw the
+// course's 6U CubeSat instead (CubeSatModel, ICD smo-vr/1 issue 2).
 // The wings never turn with the solar-array drive: ICD section 6b marks sada_angle_deg DO NOT USE.
 using Eosat1.Core;
 using UnityEngine;
