@@ -577,7 +577,7 @@ namespace Eosat1
             GUI.Label(new Rect(x0, y0, w - cardPad * 2f, titleH), HudStyle.Spaced("HOW TO USE THE SIMULATION"), HudStyle.Title);
             var sub = new GUIContent(headsetShown
                 ? "Someone is in the headset: this screen shows what they see, and every button and key works for them too (the camera is theirs)."
-                : "You are next to EOS SAT-1, life size, 500 km above the Earth. Every button on screen does the same as its key.");
+                : "You are next to the satellite, 500 km above the Earth. Every button on screen does the same as its key.");
             var subStyle = new GUIStyle(HudStyle.Dim);
             subStyle.alignment = TextAnchor.MiddleCenter;
             GUI.Label(new Rect(x0, y0 + titleH, w - cardPad * 2f, subH), sub, subStyle);

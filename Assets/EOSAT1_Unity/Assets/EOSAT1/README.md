@@ -19,7 +19,8 @@ will reuse.
    (`Assets/EOSAT1` is simplest). Wait for Unity to compile.
 3. Menu **EOSAT-1 > Build Demo Scene**. This creates the materials, meshes and
    `EOSAT1/Scenes/EOSAT1_Demo.unity` next to the scripts, and opens it.
-4. Press **Play**. You are behind EOS SAT-1, which is tumbling just after separation, with
+4. Press **Play**. You are behind the satellite (the course's 6U CubeSat; Settings > Satellite
+   model shows EOS SAT-1), which is tumbling just after separation, with
    the Earth 500 km below. Press `=` a few times to speed time up and watch slide 23 play
    out: antenna at 600 s, turn to face Earth at 900–1200 s, panels at 1300–1430 s, eclipse
    about 1980–4000 s, 25° roll to image at 4300–4800 s.
@@ -49,8 +50,8 @@ back of a mission control room, facing three wall screens.
 
 **Settings** are remembered between runs and apply when you start from the menu: data source
 (Sandbox / Replay / Live link), time speed at start (1x / 10x / 60x), info panel and control
-hints shown or hidden, the headset's snap-turn angle, the satellite model (**EOS SAT-1**, the
-default, or the course ICD's 6U CubeSat) and the jetpack sound (on / off). `eosat1_link.json`
+hints shown or hidden, the headset's snap-turn angle, the satellite model (the course ICD's
+rectangular **6U CubeSat**, the default, or EOS SAT-1) and the jetpack sound (on / off). `eosat1_link.json`
 and the `-eosat...` command-line options still override them.
 
 The room is built by code when the scene starts (`Scripts/Unity/Menu`), so the scene holds
@@ -209,9 +210,10 @@ green, amber or red light and a one-word answer.
 
 ## The spacecraft model
 
-This EOS SAT-1 is the model drawn by default. Settings > Satellite model can draw the course
-ICD's 6U CubeSat instead (`CubeSatModel`, built at run time with the same materials); the
-EOS SAT-1 parts then stay in the scene, hidden.
+By default the course ICD's rectangular 6U CubeSat is drawn instead of this model
+(`CubeSatModel`, built at run time with these same materials, so it wears the same gold foil
+and solar cells); the EOS SAT-1 parts stay in the scene, hidden. Settings > Satellite model
+switches to EOS SAT-1.
 
 | | |
 |---|---|

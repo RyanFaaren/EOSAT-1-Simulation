@@ -1516,7 +1516,7 @@ namespace Eosat1
             { "note.snap",     new[] { "How far the right stick turns you", "Angle de rotation du stick droit" } },
             { "val.shown",     new[] { "SHOWN", "AFFICH\u00c9" } },
             { "set.model",     new[] { "SATELLITE MODEL", "MOD\u00c8LE DU SATELLITE" } },
-            { "note.model",    new[] { "EOS SAT-1 (the real one) or the course's 6U CubeSat", "EOS SAT-1 (le vrai) ou le CubeSat 6U du cours" } },
+            { "note.model",    new[] { "The course's 6U CubeSat, or EOS SAT-1 (the real one)", "Le CubeSat 6U du cours, ou EOS SAT-1 (le vrai)" } },
             { "val.cubesat",   new[] { "6U CUBESAT", "CUBESAT 6U" } },
             { "val.eosat",     new[] { "EOS SAT-1", "EOS SAT-1" } },
             { "val.hidden",    new[] { "HIDDEN", "MASQU\u00c9" } },
