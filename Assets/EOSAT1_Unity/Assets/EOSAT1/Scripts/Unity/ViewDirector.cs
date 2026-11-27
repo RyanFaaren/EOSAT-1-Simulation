@@ -389,14 +389,37 @@ namespace Eosat1
         /// switched off (Settings, or K) the controller isn't drawn, so the screen floats in front
         /// of you instead, low and to the right, and turns with your head.
         /// </summary>
+        bool fullPlaced;
+        [Tooltip("Headset, full camera view (C twice): how wide the big screen is and how far in front of you, metres.")]
+        public float fullViewWidth = 2.6f, fullViewDistance = 1.6f;
+
         void PlaceVrScreen()
         {
             if (rig == null) return;
+            if (display == SatCameraDisplay.Full)
+            {
+                // the whole view becomes the camera: a big framed screen standing in front of where you
+                // look when it opens, at eye height, fixed in the room (it doesn't follow your head)
+                Transform room = rig.cameraOffset != null ? rig.cameraOffset : rig.transform;
+                if (fullPlaced && vrScreen.transform.parent == room) return;
+                if (rig.head == null) return;
+                Vector3 fwd = rig.head.forward;
+                fwd.y = 0f;
+                if (fwd.sqrMagnitude < 1e-4f) fwd = rig.transform.forward;
+                fwd.Normalize();
+                vrScreen.transform.SetParent(room, true);
+                vrScreen.transform.SetPositionAndRotation(rig.head.position + fwd * fullViewDistance, Quaternion.LookRotation(fwd, Vector3.up));
+                vrScreen.transform.localScale = Vector3.one * (fullViewWidth / (2f * FrameHalfWidth));
+                SetLayer(vrScreen);
+                fullPlaced = true;
+                return;
+            }
+            fullPlaced = false;
             bool onHand = MenuSettings.UseControllers && rig.rightHand != null;
             Transform laptopScreen = null, side;
             bool onLaptop = !onHand && LaptopMarker.Current != null && LaptopMarker.Current.TryGetAnchors(out laptopScreen, out side);
             Transform want = onHand ? rig.rightHand : onLaptop ? laptopScreen : rig.head;
-            if (want == null || vrScreen.transform.parent == want) return;
+            if (want == null || (vrScreen.transform.parent == want && vrScreen.transform.localScale.x < 3f)) return;
             vrScreen.transform.SetParent(want, false);
             vrScreen.transform.localScale = Vector3.one;
             if (onHand)
@@ -463,15 +486,16 @@ namespace Eosat1
         {
             if (!ready) return;
             bool headset = UnityEngine.XR.XRSettings.isDeviceActive;
-            if (headset) display = display == SatCameraDisplay.Off ? SatCameraDisplay.Inset : SatCameraDisplay.Off;
-            else display = (SatCameraDisplay)(((int)display + 1) % 3);
+            display = (SatCameraDisplay)(((int)display + 1) % 3);   // off -> small screen -> full view -> off
+            fullPlaced = false;
             // the camera picture needs the life-size scene around the spacecraft
             if (display != SatCameraDisplay.Off && space.overview) space.overview = false;
             ApplyState();
             if (display == SatCameraDisplay.Off) app.Say("Satellite camera view off");
             else if (headset && vrScreen == null) app.Say("Satellite camera: no screen could be made (shader EOSAT1/Screen missing)");
-            else app.Say(headset ? (MenuSettings.UseControllers ? "Satellite camera: on the screen above your right hand"
-                                                                : "Satellite camera: on the laptop's screen, or low and to your right if the laptop isn't set (J)")
+            else if (headset && display == SatCameraDisplay.Full) app.Say("Satellite camera: full view in front of you ([ ] to zoom, C to close)");
+            else app.Say(headset ? (MenuSettings.UseControllers ? "Satellite camera: on the screen above your right hand (C again for the full view)"
+                                                                : "Satellite camera: on the laptop's screen (C again for the full view)")
                                  : (display == SatCameraDisplay.Inset ? "Satellite camera: corner picture (C again for full screen)"
                                                                        : "Satellite camera: full screen (wheel or [ ] to zoom)"));
         }
@@ -579,7 +603,7 @@ namespace Eosat1
             }
 
             int w, h;
-            if (headset) { w = 1024; h = 1024; }
+            if (headset) { w = h = display == SatCameraDisplay.Full ? 1536 : 1024; }
             else if (display == SatCameraDisplay.Full) { w = Mathf.Max(16, Screen.width); h = Mathf.Max(16, Screen.height); }
             else { w = h = InsetSize(); }
             int aa = headset ? 1 : 2;   // headset: drawn at 1024 and shown smaller, smoothed by its mipmaps
