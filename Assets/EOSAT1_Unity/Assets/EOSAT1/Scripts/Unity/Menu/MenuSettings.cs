@@ -22,9 +22,9 @@ namespace Eosat1
         const string KeyHints = "eosat1.menu.hints";
         const string KeySnap = "eosat1.menu.snapTurn";
         const string KeyHost = "eosat1.menu.simHost";
-        // a new name on purpose: the old "eosat1.menu.satModel" defaulted to the CubeSat, and a
-        // computer that ever saved it would keep showing the CubeSat after EOS SAT-1 became the default again
-        const string KeyModel = "eosat1.menu.cubeSat";
+        // a fresh name on purpose, so a choice saved while EOS SAT-1 was the default
+        // ("eosat1.menu.cubeSat", 26 Nov) doesn't keep the CubeSat hidden now that it is the default again
+        const string KeyModel = "eosat1.menu.model";
         const string KeyJetSound = "eosat1.menu.jetpackSound";
 
         /// <summary>The simulator's TCP port (smo-vr/1).</summary>
@@ -124,14 +124,14 @@ namespace Eosat1
         public static float SnapTurnDegrees { get { return SnapChoices[SnapChoice]; } }
 
         /// <summary>
-        /// Which satellite to draw. False (the default): the detailed EOS SAT-1 model from the scene,
-        /// the real satellite the client asked for. True: the course's 6U CubeSat (ICD smo-vr/1 issue 2,
-        /// section 6b: 0.100 x 0.226 x 0.366 m bus, fixed flap wings, 4 UHF elements on the zenith deck).
-        /// Read live by SatelliteView, so it also works when the demo scene is opened directly.
+        /// Which satellite to draw. True (the default): the course's rectangular 6U CubeSat (ICD smo-vr/1
+        /// issue 2, section 6b: 0.100 x 0.226 x 0.366 m bus, fixed flap wings, 4 UHF elements on the
+        /// zenith deck), wearing the EOS SAT-1 model's materials. False: the detailed EOS SAT-1 model from
+        /// the scene. Read live by SatelliteView, so it also works when the demo scene is opened directly.
         /// </summary>
         public static bool UseCubeSat
         {
-            get { return PlayerPrefs.GetInt(KeyModel, 0) != 0; }
+            get { return PlayerPrefs.GetInt(KeyModel, 1) != 0; }
             set { PlayerPrefs.SetInt(KeyModel, value ? 1 : 0); }
         }
 
