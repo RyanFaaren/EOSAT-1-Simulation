@@ -6,6 +6,9 @@
 // real room however you fly, turn or jump between viewpoints, because it hangs on the
 // headset's tracking space (the room), not on the virtual world.
 //
+// Above it floats a key card: every key and what it does, so you can work the simulation from
+// the keyboard without seeing the laptop's screen (its buttons can't be aimed at in the headset).
+//
 //   J          set the laptop here (again any time, e.g. after moving the chair)
 //   Shift + J  hide / show the outline
 //
@@ -31,7 +34,39 @@ namespace Eosat1
         const string KeyHidden = "eosat1.vr.laptopHidden";
 
         Transform marker;
-        Material mat;
+        Material mat, cardMat;
+
+        // the key card, in two columns (proportional font: no lining up with spaces)
+        static readonly string[] CardLeft =
+        {
+            "<b>TIME</b>",
+            "Space   pause / play",
+            "=  -   faster / slower",
+            "\u2192  \u2190   skip 1 minute",
+            "Backspace   start again",
+            "<b>SATELLITE</b> (Sandbox)",
+            "1  2   open solar panels",
+            "3   open the antenna",
+            "6  7   fold panels / antenna",
+            "4  5   jam antenna / panel",
+            "N  S   point at Earth / Sun",
+            "R  T   imaging roll / tumble",
+        };
+        static readonly string[] CardRight =
+        {
+            "<b>VIEWS</b>",
+            "Z   whole Earth",
+            "C   satellite camera   [ ]  zoom",
+            "V  F   next / first viewpoint",
+            "G  B   body axes / camera line",
+            "O  P   orbit path / panel line",
+            "<b>PANELS AND SETTINGS</b>",
+            "H   status panel (laptop)",
+            "M   data source",
+            "K   headset controllers on / off",
+            "J   laptop is here   Shift+J  hide",
+            "Esc   main menu",
+        };
         bool hasPose;
         Vector3 posePosition;
         float poseYaw;
@@ -191,7 +226,52 @@ namespace Eosat1
             tm.alignment = TextAlignment.Center;
             tm.color = color;
             label.AddComponent<FaceCamera>();
+
+            // the key card: a dark panel standing above the laptop's screen, facing you
+            cardMat = new Material(sh) { name = "EOSAT1 Laptop Key Card (runtime)" };
+            Color back = new Color(0.02f, 0.05f, 0.09f, 1f);
+            if (cardMat.HasProperty("_BaseColor")) cardMat.SetColor("_BaseColor", back);
+            if (cardMat.HasProperty("_Color")) cardMat.SetColor("_Color", back);
+            var card = new GameObject("Key Card").transform;
+            card.SetParent(marker, false);
+            card.localPosition = new Vector3(0f, h + 0.3f, d * 0.5f + 0.06f);
+            card.localRotation = Quaternion.Euler(-12f, 0f, 0f);   // leaning back a little, towards your eyes
+            GameObject panel = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            panel.name = "Backing";
+            Destroy(panel.GetComponent<Collider>());
+            panel.transform.SetParent(card, false);
+            panel.transform.localPosition = new Vector3(0f, 0f, 0.004f);
+            panel.transform.localScale = new Vector3(0.58f, 0.33f, 1f);
+            Renderer pr = panel.GetComponent<Renderer>();
+            pr.sharedMaterial = cardMat;
+            pr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            pr.receiveShadows = false;
+            Rect3(card, Vector3.zero, Quaternion.Euler(-90f, 0f, 0f), 0.58f, 0.33f, 0.004f);   // cyan frame
+            CardText(card, f, "<b>KEYS</b>   (easier than aiming the mouse in the headset)", new Vector3(-0.27f, 0.145f, 0f), 0.0034f, new Color(0.3f, 0.95f, 1f, 1f));
+            CardText(card, f, string.Join("\n", CardLeft), new Vector3(-0.27f, 0.105f, 0f), 0.003f, new Color(0.85f, 0.95f, 1f, 1f));
+            CardText(card, f, string.Join("\n", CardRight), new Vector3(0.01f, 0.105f, 0f), 0.003f, new Color(0.85f, 0.95f, 1f, 1f));
             marker.gameObject.SetActive(false);
+        }
+
+        static void CardText(Transform card, Font f, string text, Vector3 pos, float size, Color color)
+        {
+            var go = new GameObject("Card Text");
+            go.transform.SetParent(card, false);
+            go.transform.localPosition = pos;
+            var tm = go.AddComponent<TextMesh>();
+            if (f != null)
+            {
+                tm.font = f;
+                go.GetComponent<MeshRenderer>().sharedMaterial = f.material;
+            }
+            tm.richText = true;
+            tm.text = text;
+            tm.fontSize = 48;
+            tm.characterSize = size;
+            tm.lineSpacing = 1.15f;
+            tm.anchor = TextAnchor.UpperLeft;
+            tm.alignment = TextAlignment.Left;
+            tm.color = color;
         }
 
         /// <summary>A rectangle of thin bars lying in the local XZ plane (width along X, depth along Z).</summary>
@@ -221,6 +301,7 @@ namespace Eosat1
         void OnDestroy()
         {
             if (mat != null) Destroy(mat);
+            if (cardMat != null) Destroy(cardMat);
         }
     }
 }
