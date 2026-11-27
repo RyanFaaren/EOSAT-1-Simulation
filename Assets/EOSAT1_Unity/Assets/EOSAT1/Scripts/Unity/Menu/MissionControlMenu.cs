@@ -92,7 +92,7 @@ namespace Eosat1
         readonly List<ScreenRect> screens = new List<ScreenRect>();
         readonly List<MenuButton> buttons = new List<MenuButton>();
         // settings rows: 0 language, 1 data source, 2 simulator address, 3 speed, 4 info panel, 5 hints, 6 snap
-        readonly MenuButton[] settingButtons = new MenuButton[9];
+        readonly MenuButton[] settingButtons = new MenuButton[10];
         const int AddressRow = 2;
         TextMesh addressNote;
 
@@ -403,9 +403,9 @@ namespace Eosat1
             Divider(s, 1.08f, 2.8f);
 
             string[] names = { T("set.language"), T("set.source"), T("set.address"), T("set.speed"), T("set.info"), T("set.hints"), T("set.snap"), T("set.model"),
-                               T("set.jetSound") };
+                               T("set.jetSound"), T("set.controllers") };
             string[] notes = { T("note.language"), "", "", T("note.speed"), T("note.info"), T("note.hints"), T("note.snap"), T("note.model"),
-                               T("note.jetSound") };
+                               T("note.jetSound"), T("note.controllers") };
             Action[] actions =
             {
                 null,   // language: rebuilds everything, handled below
@@ -417,10 +417,11 @@ namespace Eosat1
                 delegate { MenuSettings.NextSnap(); },
                 delegate { MenuSettings.UseCubeSat = !MenuSettings.UseCubeSat; },
                 delegate { MenuSettings.JetpackSound = !MenuSettings.JetpackSound; },
+                delegate { MenuSettings.UseControllers = !MenuSettings.UseControllers; },
             };
             for (int i = 0; i < names.Length; i++)
             {
-                float y = 0.86f - 0.225f * i;   // 9 rows, clear of the Back button
+                float y = 0.86f - 0.2f * i;   // 10 rows, clear of the Back button
                 Label("Setting Name", s, new Vector3(-1.38f, y + 0.045f, 0f), names[i], 0.085f, TextBright, TextAnchor.MiddleLeft);
                 TextMesh note = Label("Setting Note", s, new Vector3(-1.38f, y - 0.07f, 0f), notes[i], 0.052f, ActionText, TextAnchor.MiddleLeft);
                 if (i == 1) feedDescription = note;
@@ -443,7 +444,7 @@ namespace Eosat1
                         MenuSettings.Save();
                         RefreshSettings();
                     };
-                settingButtons[i] = Button("Setting Button", s, new Vector3(0.8f, y, 0f), new Vector2(1.2f, 0.2f), "", 0.08f, false, onClick);
+                settingButtons[i] = Button("Setting Button", s, new Vector3(0.8f, y, 0f), new Vector2(1.2f, 0.18f), "", 0.08f, false, onClick);
             }
             Button("Back Button", s, new Vector3(0f, -1.24f, 0f), new Vector2(1.4f, 0.22f), T("btn.back"), 0.09f, true,
                    delegate { Face(0f, "hint.turnBack"); });
@@ -854,7 +855,7 @@ namespace Eosat1
         /// <summary>Is the click button still held: left mouse, or the pointing controller's trigger or A / X.</summary>
         bool PointerHeld(bool headset)
         {
-            if (!headset) return InputShim.MouseHeld(0);
+            if (!headset || !MenuSettings.UseControllers) return InputShim.MouseHeld(0) || (headset && InputShim.Held(KeyCode.Space));
             InputDevice d = InputDevices.GetDeviceAtXRNode(useRightHand ? XRNode.RightHand : XRNode.LeftHand);
             if (!d.isValid) return false;
             bool v;
@@ -1016,6 +1017,7 @@ namespace Eosat1
             if (settingButtons[6] != null) settingButtons[6].Label.text = MenuSettings.SnapTurnDegrees.ToString("0", Inv) + "\u00b0";
             if (settingButtons[7] != null) settingButtons[7].Label.text = T(MenuSettings.UseCubeSat ? "val.cubesat" : "val.eosat");
             if (settingButtons[8] != null) settingButtons[8].Label.text = T(MenuSettings.JetpackSound ? "val.on" : "val.off");
+            if (settingButtons[9] != null) settingButtons[9].Label.text = T(MenuSettings.UseControllers ? "val.on" : "val.off");
             if (feedDescription != null) feedDescription.text = FeedDescription();
             UpdateSlowDisplays();
         }
@@ -1192,7 +1194,7 @@ namespace Eosat1
             }
             if (hintText != null)
             {
-                string hint = hintOverride != null ? hintOverride : T(headset ? "hint.headset" : "hint.desktop");
+                string hint = hintOverride != null ? hintOverride : T(!headset ? "hint.desktop" : MenuSettings.UseControllers ? "hint.headset" : "hint.headsetKeys");
                 if (hintText.text != hint) hintText.text = hint;
             }
 
@@ -1246,6 +1248,11 @@ namespace Eosat1
 
         bool ReadClick(bool headset)
         {
+            if (headset && !MenuSettings.UseControllers)
+            {
+                prevTriggerL = prevTriggerR = prevPrimaryL = prevPrimaryR = false;
+                return InputShim.MouseDown(0) || InputShim.Down(KeyCode.Space);
+            }
             if (!headset)
             {
                 prevTriggerL = prevTriggerR = prevPrimaryL = prevPrimaryR = false;
@@ -1280,6 +1287,12 @@ namespace Eosat1
                 ray = cam.ScreenPointToRay(InputShim.MousePosition());
                 return true;
             }
+            // controllers switched off in Settings: point with your head
+            if (!MenuSettings.UseControllers)
+            {
+                ray = new Ray(head.position, head.forward);
+                return true;
+            }
             // the direction the controller is made to point along, when the runtime gives one
             if (vrRig != null && vrRig.TryGetPointerRay(useRightHand, out ray)) return true;
             Transform hand = useRightHand ? rightHand : leftHand;
@@ -1311,7 +1324,8 @@ namespace Eosat1
         void ShowPointer(bool headset, bool hasRay, Ray ray, float distance)
         {
             bool show = headset && hasRay && !busy;
-            if (laser.gameObject.activeSelf != show) laser.gameObject.SetActive(show);
+            bool beam = show && MenuSettings.UseControllers;   // pointing with your head: just the dot, no beam
+            if (laser.gameObject.activeSelf != beam) laser.gameObject.SetActive(beam);
             if (reticle.gameObject.activeSelf != show) reticle.gameObject.SetActive(show);
             if (!show) return;
             Quaternion along = Quaternion.LookRotation(ray.direction);
@@ -1520,6 +1534,10 @@ namespace Eosat1
             { "val.cubesat",   new[] { "6U CUBESAT", "CUBESAT 6U" } },
             { "val.eosat",     new[] { "EOS SAT-1", "EOS SAT-1" } },
             { "val.hidden",    new[] { "HIDDEN", "MASQU\u00c9" } },
+            { "set.controllers", new[] { "HEADSET CONTROLLERS", "MANETTES DU CASQUE" } },
+            { "note.controllers", new[] { "OFF: look with the headset, control with mouse and keys (K)", "D\u00c9SACTIV\u00c9 : regarder au casque, commander clavier/souris (K)" } },
+            { "hint.headsetKeys", new[] { "Look at a button and click the mouse (or press Space)  |  Enter starts",
+                                         "Regardez un bouton et cliquez (ou Espace)  |  Entr\u00e9e d\u00e9marre" } },
             { "set.jetSound",  new[] { "JETPACK SOUND (HEADSET)", "SON DU JETPACK (CASQUE)" } },
             { "note.jetSound", new[] { "A soft puff when the jets change your speed", "Un l\u00e9ger souffle quand les jets changent la vitesse" } },
             { "val.on",        new[] { "ON", "ACTIV\u00c9" } },

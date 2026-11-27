@@ -26,6 +26,7 @@ namespace Eosat1
         // computer that ever saved it would keep showing the CubeSat after EOS SAT-1 became the default again
         const string KeyModel = "eosat1.menu.cubeSat";
         const string KeyJetSound = "eosat1.menu.jetpackSound";
+        const string KeyControllers = "eosat1.menu.vrControllers";
 
         /// <summary>The simulator's TCP port (smo-vr/1).</summary>
         public const int SimPort = 8100;
@@ -140,6 +141,17 @@ namespace Eosat1
         {
             get { return PlayerPrefs.GetInt(KeyJetSound, 1) != 0; }
             set { PlayerPrefs.SetInt(KeyJetSound, value ? 1 : 0); }
+        }
+
+        /// <summary>
+        /// The headset's controllers. On (the default): sticks, buttons, triggers and grips work and
+        /// the gloves are drawn. Off: the headset only looks around; everything is done with the
+        /// laptop's mouse and keyboard (K switches it during the simulation). Read live.
+        /// </summary>
+        public static bool UseControllers
+        {
+            get { return PlayerPrefs.GetInt(KeyControllers, 1) != 0; }
+            set { PlayerPrefs.SetInt(KeyControllers, value ? 1 : 0); }
         }
 
         // ------------------------------------------------------------------ menu helpers

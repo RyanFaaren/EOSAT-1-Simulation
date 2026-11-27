@@ -187,6 +187,13 @@ namespace Eosat1
             if (InputShim.Down(KeyCode.B)) app.ToggleBoresight();
             if (InputShim.Down(KeyCode.L)) app.ToggleViewFrame();
             if (InputShim.Down(KeyCode.M)) app.CycleFeed();
+            if (InputShim.Down(KeyCode.K))
+            {
+                MenuSettings.UseControllers = !MenuSettings.UseControllers;
+                MenuSettings.Save();
+                app.Say(MenuSettings.UseControllers ? "Headset controllers ON"
+                                                    : "Headset controllers OFF: the headset only looks around, use the mouse and keyboard (K turns them back on)");
+            }
             if (InputShim.Down(KeyCode.H) && infoPanel != null) infoPanel.Toggle();   // F1 = help card, Tab = control bar (DesktopHud)
         }
     }

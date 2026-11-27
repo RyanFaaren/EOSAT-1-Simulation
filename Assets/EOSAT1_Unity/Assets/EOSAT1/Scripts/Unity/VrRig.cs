@@ -136,8 +136,10 @@ namespace Eosat1
         void Update()
         {
             bool active = XRSettings.isDeviceActive;
-            SetActive(leftHand, active);
-            SetActive(rightHand, active);
+            // Settings > Headset controllers off: the headset only looks around; no gloves, no buttons
+            bool controllers = MenuSettings.UseControllers;
+            SetActive(leftHand, active && controllers);
+            SetActive(rightHand, active && controllers);
             if (!active)
             {
                 floorConfirmed = false;
@@ -151,8 +153,15 @@ namespace Eosat1
                 Ray probe;
                 if (!TryGetPointerRay(true, out probe)) TryGetPointerRay(false, out probe);
             }
+            if (!controllers)
+            {
+                if (menu != null && menu.IsOpen) menu.Close();
+                if (jetpack != null && head != null) jetpack.Fly(Vector2.zero, 0f, Time.unscaledDeltaTime);   // coast to a stop
+                Buttons(false);   // keeps track of held buttons so switching back on doesn't fire them
+                return;
+            }
             Locomotion();
-            Buttons();
+            Buttons(true);
         }
 
         [BeforeRenderOrder(100)]
@@ -403,7 +412,7 @@ namespace Eosat1
         }
 
         // ------------------------------------------------------------------ buttons
-        void Buttons()
+        void Buttons(bool act)
         {
             InputDevice left = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
             InputDevice right = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
@@ -418,6 +427,7 @@ namespace Eosat1
             bool gripR = Pressed(right, CommonUsages.gripButton, ref prevGripR);
             bool stickR = Pressed(right, CommonUsages.primary2DAxisClick, ref prevStickR);
             bool stickL = Pressed(left, CommonUsages.primary2DAxisClick, ref prevStickL);
+            if (!act) return;
 
             if (menuButton && menu != null) menu.Toggle();
             if (menu != null && menu.IsOpen)
