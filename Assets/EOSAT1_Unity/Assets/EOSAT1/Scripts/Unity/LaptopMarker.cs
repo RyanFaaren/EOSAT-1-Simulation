@@ -1,8 +1,10 @@
 // EOSAT-1 VR - shows where the real laptop (and its keyboard) is while you wear the headset.
 //
 // Set it once: sit at the laptop with the headset on, hands on the keyboard, look at the
-// laptop's screen, and press J. A glowing outline of a laptop (keyboard and screen) is then
-// drawn where the real one is, with a "LAPTOP" label, in the headset only. It stays put in the
+// laptop's screen, and press J. For a closer fit, first lay a controller flat in the middle of
+// the keyboard (on G / H): J then uses the controller's position. A glowing outline of a laptop is then
+// drawn where the real one is, with a "LAPTOP" label, in the headset only. On it lies a drawn
+// keyboard, every key labelled, with the keys the simulation uses lit up in cyan. It stays put in the
 // real room however you fly, turn or jump between viewpoints, because it hangs on the
 // headset's tracking space (the room), not on the virtual world.
 //
@@ -35,6 +37,7 @@ namespace Eosat1
 
         Transform marker;
         Material mat, cardMat;
+        Material[] keyMats;
         GameObject focusWarning;
 
         // the key card, in two columns (proportional font: no lining up with spaces)
@@ -129,13 +132,35 @@ namespace Eosat1
             fwd.Normalize();
             posePosition = eyes + fwd * keyboardAhead + Vector3.down * keyboardBelow;
             poseYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
+            // a controller laid on the keyboard, near where we'd guess it, pins it down exactly
+            bool fromController = false;
+            Vector3 best = Vector3.zero;
+            float bestDistance = 0.6f;
+            foreach (XRNode node in new[] { XRNode.RightHand, XRNode.LeftHand })
+            {
+                InputDevice dev = InputDevices.GetDeviceAtXRNode(node);
+                Vector3 cp;
+                bool tracked;
+                if (!dev.isValid || !dev.TryGetFeatureValue(CommonUsages.devicePosition, out cp)) continue;
+                if (dev.TryGetFeatureValue(CommonUsages.isTracked, out tracked) && !tracked) continue;
+                if (cp.y > eyes.y - 0.2f) continue;   // in a hand near the face, not on the desk
+                float dist = Vector3.Distance(cp, posePosition);
+                if (dist < bestDistance)
+                {
+                    bestDistance = dist;
+                    best = cp;
+                    fromController = true;
+                }
+            }
+            if (fromController) posePosition = best + Vector3.down * 0.025f;   // a controller lying flat is ~5 cm thick
             hasPose = true;
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             PlayerPrefs.SetString(KeyPose, posePosition.x.ToString("0.###", inv) + " " + posePosition.y.ToString("0.###", inv) + " " +
                                            posePosition.z.ToString("0.###", inv) + " " + poseYaw.ToString("0.#", inv));
             PlayerPrefs.SetInt(KeyHidden, 0);
             PlayerPrefs.Save();
-            Say("Laptop marked: its outline now shows where the real keyboard is (Shift + J hides it)");
+            Say(fromController ? "Laptop marked from the controller on the keyboard (Shift + J hides it)"
+                               : "Laptop marked: its outline shows where the keyboard is (for a closer fit, lay a controller on the middle of the keyboard and press J again)");
         }
 
         void Say(string message)
@@ -193,23 +218,6 @@ namespace Eosat1
             marker = new GameObject("Real Laptop Marker").transform;
             marker.SetParent(Room, false);
             float w = laptopSize.x, d = laptopSize.y, h = laptopSize.z, t = 0.006f;
-
-            // keyboard deck: a rectangle on the desk, centred on the marker, front edge towards you
-            Rect3(marker, Vector3.zero, Quaternion.identity, w, d, t);
-            // the keys: a smaller rectangle inside it
-            Rect3(marker, new Vector3(0f, 0f, 0.02f), Quaternion.identity, w * 0.85f, d * 0.45f, t * 0.6f);
-            // the screen: hinged at the back edge, leaning back 15 degrees
-            var screen = new GameObject("Screen").transform;
-            screen.SetParent(marker, false);
-            screen.localPosition = new Vector3(0f, 0f, d * 0.5f);
-            screen.localRotation = Quaternion.Euler(-75f, 0f, 0f);
-            Rect3(screen, new Vector3(0f, 0f, h * 0.5f), Quaternion.identity, w, h, t);
-
-            // label above the screen
-            var label = new GameObject("Label");
-            label.transform.SetParent(marker, false);
-            label.transform.localPosition = new Vector3(0f, h + 0.08f, d * 0.5f);
-            var tm = label.AddComponent<TextMesh>();
             Font f = null;
             try { f = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); }
             catch (System.Exception) { }
@@ -218,6 +226,25 @@ namespace Eosat1
                 try { f = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
                 catch (System.Exception) { }
             }
+
+            // the marker's origin is the middle of the keyboard (between G and H); the keys run
+            // from the space bar (front, towards you) to the function row (back)
+            float back = 3.5f * KeyPitch + 0.015f;   // the deck's back edge, where the screen hinges
+            Rect3(marker, new Vector3(0f, -0.004f, back - d * 0.5f), Quaternion.identity, w, d, t);   // deck (keys + touchpad)
+            Rect3(marker, new Vector3(0f, -0.004f, back - d + 0.045f), Quaternion.identity, 0.11f, 0.06f, t * 0.6f);   // touchpad
+            BuildKeyboard(marker, f);
+            // the screen: hinged at the back edge, leaning back 15 degrees
+            var screen = new GameObject("Screen").transform;
+            screen.SetParent(marker, false);
+            screen.localPosition = new Vector3(0f, 0f, back);
+            screen.localRotation = Quaternion.Euler(-75f, 0f, 0f);
+            Rect3(screen, new Vector3(0f, 0f, h * 0.5f), Quaternion.identity, w, h, t);
+
+            // label above the screen
+            var label = new GameObject("Label");
+            label.transform.SetParent(marker, false);
+            label.transform.localPosition = new Vector3(0f, h + 0.08f, back);
+            var tm = label.AddComponent<TextMesh>();
             if (f != null)
             {
                 tm.font = f;
@@ -233,12 +260,12 @@ namespace Eosat1
 
             // the key card: a dark panel standing above the laptop's screen, facing you
             cardMat = new Material(sh) { name = "EOSAT1 Laptop Key Card (runtime)" };
-            Color back = new Color(0.02f, 0.05f, 0.09f, 1f);
-            if (cardMat.HasProperty("_BaseColor")) cardMat.SetColor("_BaseColor", back);
-            if (cardMat.HasProperty("_Color")) cardMat.SetColor("_Color", back);
+            Color cardColor = new Color(0.02f, 0.05f, 0.09f, 1f);
+            if (cardMat.HasProperty("_BaseColor")) cardMat.SetColor("_BaseColor", cardColor);
+            if (cardMat.HasProperty("_Color")) cardMat.SetColor("_Color", cardColor);
             var card = new GameObject("Key Card").transform;
             card.SetParent(marker, false);
-            card.localPosition = new Vector3(0f, h + 0.3f, d * 0.5f + 0.06f);
+            card.localPosition = new Vector3(0f, h + 0.3f, back + 0.06f);
             card.localRotation = Quaternion.Euler(-12f, 0f, 0f);   // leaning back a little, towards your eyes
             GameObject panel = GameObject.CreatePrimitive(PrimitiveType.Quad);
             panel.name = "Backing";
@@ -272,6 +299,99 @@ namespace Eosat1
             focusWarning.SetActive(false);
             CardText(card, f, string.Join("\n", CardRight), new Vector3(0.01f, 0.105f, 0f), 0.003f, new Color(0.85f, 0.95f, 1f, 1f));
             marker.gameObject.SetActive(false);
+        }
+
+        // ------------------------------------------------------------------ the drawn keyboard
+        const float KeyPitch = 0.019f;   // a laptop key and its gap
+
+        // US laptop layout, back row first: label, width in keys
+        static readonly string[][] Rows =
+        {
+            new[] { "Esc", "1", "F1", "1", "F2", "1", "F3", "1", "F4", "1", "F5", "1", "F6", "1", "F7", "1", "F8", "1", "F9", "1", "F10", "1", "F11", "1", "F12", "1", "Del", "2" },
+            new[] { "`", "1", "1", "1", "2", "1", "3", "1", "4", "1", "5", "1", "6", "1", "7", "1", "8", "1", "9", "1", "0", "1", "-", "1", "=", "1", "Bksp", "2" },
+            new[] { "Tab", "1.5", "Q", "1", "W", "1", "E", "1", "R", "1", "T", "1", "Y", "1", "U", "1", "I", "1", "O", "1", "P", "1", "[", "1", "]", "1", "\\", "1.5" },
+            new[] { "Caps", "1.75", "A", "1", "S", "1", "D", "1", "F", "1", "G", "1", "H", "1", "J", "1", "K", "1", "L", "1", ";", "1", "'", "1", "Enter", "2.25" },
+            new[] { "Shift", "2.25", "Z", "1", "X", "1", "C", "1", "V", "1", "B", "1", "N", "1", "M", "1", ",", "1", ".", "1", "/", "1", "Shift", "2.75" },
+            new[] { "Ctrl", "1.5", "Fn", "1", "Win", "1", "Alt", "1", "Space", "5", "Alt", "1", "Ctrl", "1", "←", "1", "↑↓", "1", "→", "1.5" },
+        };
+
+        // the keys that do something in the simulation (the key card lists them)
+        const string Used = " Esc F1 1 2 3 4 5 6 7 - = Bksp Tab R T O P [ ] S F G H J K L Z C V B N M , . Shift Space ← → ";
+
+        static bool IsUsed(string key)
+        {
+            return Used.Contains(" " + key + " ");
+        }
+
+        void BuildKeyboard(Transform parent, Font f)
+        {
+            Shader sh = mat.shader;
+            var lit = new Material(sh) { name = "EOSAT1 Laptop Key (used)" };
+            var dim = new Material(sh) { name = "EOSAT1 Laptop Key" };
+            SetColor(lit, new Color(0.05f, 0.35f, 0.42f, 1f));
+            SetColor(dim, new Color(0.08f, 0.09f, 0.11f, 1f));
+            keyMats = new[] { lit, dim };
+
+            var kb = new GameObject("Keyboard").transform;
+            kb.SetParent(parent, false);
+            const float totalWidth = 15f;   // every row is 15 keys wide
+            for (int r = 0; r < Rows.Length; r++)
+            {
+                // back to front: the home row (row 3, A S D F G H J K L) sits on the origin
+                float z = (3 - r) * KeyPitch;
+                if (r == 0) z -= 0.2f * KeyPitch;   // the short function keys sit just behind the number row
+                string[] row = Rows[r];
+                float x = -totalWidth * 0.5f;
+                for (int i = 0; i + 1 < row.Length; i += 2)
+                {
+                    float width;
+                    if (!float.TryParse(row[i + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out width) || width <= 0f)
+                        width = 1f;
+                    string key = row[i];
+                    float cx = (x + width * 0.5f) * KeyPitch;
+                    x += width;
+                    Key(kb, f, key, new Vector3(cx, 0f, z), width * KeyPitch - 0.003f, (r == 0 ? 0.6f : 1f) * KeyPitch - 0.003f, IsUsed(key));
+                }
+            }
+        }
+
+        void Key(Transform parent, Font f, string label, Vector3 pos, float width, float depth, bool used)
+        {
+            Quaternion flat = Quaternion.Euler(90f, 0f, 0f);   // lying on the desk, readable from above
+            GameObject q = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            q.name = "Key " + label;
+            Destroy(q.GetComponent<Collider>());
+            q.transform.SetParent(parent, false);
+            q.transform.localPosition = pos;
+            q.transform.localRotation = flat;
+            q.transform.localScale = new Vector3(width, depth, 1f);
+            Renderer r = q.GetComponent<Renderer>();
+            r.sharedMaterial = keyMats[used ? 0 : 1];
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+
+            var t = new GameObject("Label");
+            t.transform.SetParent(parent, false);
+            t.transform.localPosition = pos + new Vector3(0f, 0.001f, 0f);
+            t.transform.localRotation = flat;
+            var tm = t.AddComponent<TextMesh>();
+            if (f != null)
+            {
+                tm.font = f;
+                t.GetComponent<MeshRenderer>().sharedMaterial = f.material;
+            }
+            tm.text = label;
+            tm.fontSize = 48;
+            tm.characterSize = label.Length > 2 ? 0.0011f : 0.0019f;
+            tm.anchor = TextAnchor.MiddleCenter;
+            tm.alignment = TextAlignment.Center;
+            tm.color = used ? new Color(0.75f, 1f, 1f, 1f) : new Color(0.45f, 0.5f, 0.55f, 1f);
+        }
+
+        static void SetColor(Material m, Color c)
+        {
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
+            if (m.HasProperty("_Color")) m.SetColor("_Color", c);
         }
 
         static void CardText(Transform card, Font f, string text, Vector3 pos, float size, Color color)
@@ -323,6 +443,7 @@ namespace Eosat1
         {
             if (mat != null) Destroy(mat);
             if (cardMat != null) Destroy(cardMat);
+            if (keyMats != null) foreach (Material m in keyMats) if (m != null) Destroy(m);
         }
     }
 }
