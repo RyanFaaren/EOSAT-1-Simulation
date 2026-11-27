@@ -12,6 +12,34 @@ namespace Eosat1
 {
     public static class InputShim
     {
+        /// <summary>
+        /// False while the keyboard can't reach the simulation: another window has the focus
+        /// (often the Meta Quest Link app, just after Link starts). Click the Unity window to fix it.
+        /// </summary>
+        public static bool KeyboardReaches { get { return Application.isFocused; } }
+
+#if !ENABLE_LEGACY_INPUT_MANAGER && ENABLE_INPUT_SYSTEM
+        /// <summary>
+        /// With a headset on you can't see which Unity panel has the focus, and by default the new
+        /// Input System only passes keys to the game while the Game view has it. In the editor, send
+        /// all keyboard and mouse input to the game while playing, whichever panel was clicked last,
+        /// and keep devices running if the window loses focus for a moment. A copy of the settings is
+        /// changed, so the project's settings asset stays as it is.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void KeepKeysInTheGame()
+        {
+            InputSettings settings = InputSystem.settings;
+            if (settings == null) return;
+            InputSettings copy = Object.Instantiate(settings);
+            copy.name = settings.name;
+            copy.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+#if UNITY_EDITOR
+            copy.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+#endif
+            InputSystem.settings = copy;
+        }
+#endif
         public static bool Down(KeyCode k)
         {
 #if ENABLE_LEGACY_INPUT_MANAGER

@@ -35,6 +35,7 @@ namespace Eosat1
 
         Transform marker;
         Material mat, cardMat;
+        GameObject focusWarning;
 
         // the key card, in two columns (proportional font: no lining up with spaces)
         static readonly string[] CardLeft =
@@ -171,6 +172,9 @@ namespace Eosat1
             marker.localPosition = posePosition;
             marker.localRotation = Quaternion.Euler(0f, poseYaw, 0f);
             // a slow, gentle pulse so it reads as a guide, not part of the space scene
+            // keys only reach the simulation while its window has the focus: say so where they look
+            bool lost = !InputShim.KeyboardReaches;
+            if (focusWarning != null && focusWarning.activeSelf != lost) focusWarning.SetActive(lost);
             Color c = color * (0.75f + 0.25f * Mathf.Sin(Time.unscaledTime * 2f));
             c.a = 1f;
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
@@ -249,6 +253,23 @@ namespace Eosat1
             Rect3(card, Vector3.zero, Quaternion.Euler(-90f, 0f, 0f), 0.58f, 0.33f, 0.004f);   // cyan frame
             CardText(card, f, "<b>KEYS</b>   (easier than aiming the mouse in the headset)", new Vector3(-0.27f, 0.145f, 0f), 0.0034f, new Color(0.3f, 0.95f, 1f, 1f));
             CardText(card, f, string.Join("\n", CardLeft), new Vector3(-0.27f, 0.105f, 0f), 0.003f, new Color(0.85f, 0.95f, 1f, 1f));
+            var warn = new GameObject("Keyboard Warning");
+            warn.transform.SetParent(card, false);
+            warn.transform.localPosition = new Vector3(0f, -0.19f, -0.002f);
+            var wt = warn.AddComponent<TextMesh>();
+            if (f != null)
+            {
+                wt.font = f;
+                warn.GetComponent<MeshRenderer>().sharedMaterial = f.material;
+            }
+            wt.text = "KEYBOARD NOT CONNECTED: click the Unity window on the laptop once";
+            wt.fontSize = 48;
+            wt.characterSize = 0.0036f;
+            wt.anchor = TextAnchor.UpperCenter;
+            wt.alignment = TextAlignment.Center;
+            wt.color = new Color(1f, 0.4f, 0.35f, 1f);
+            focusWarning = warn;
+            focusWarning.SetActive(false);
             CardText(card, f, string.Join("\n", CardRight), new Vector3(0.01f, 0.105f, 0f), 0.003f, new Color(0.85f, 0.95f, 1f, 1f));
             marker.gameObject.SetActive(false);
         }
