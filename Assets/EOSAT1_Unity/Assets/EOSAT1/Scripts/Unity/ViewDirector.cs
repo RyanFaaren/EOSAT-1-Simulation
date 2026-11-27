@@ -304,13 +304,23 @@ namespace Eosat1
         {
             if (rig == null) return;
             bool onHand = MenuSettings.UseControllers && rig.rightHand != null;
-            Transform want = onHand ? rig.rightHand : rig.head;
+            Transform laptopScreen = null, side;
+            bool onLaptop = !onHand && LaptopMarker.Current != null && LaptopMarker.Current.TryGetAnchors(out laptopScreen, out side);
+            Transform want = onHand ? rig.rightHand : onLaptop ? laptopScreen : rig.head;
             if (want == null || vrScreen.transform.parent == want) return;
             vrScreen.transform.SetParent(want, false);
+            vrScreen.transform.localScale = Vector3.one;
             if (onHand)
             {
                 vrScreen.transform.localPosition = new Vector3(0f, 0.16f, 0.08f);
                 vrScreen.transform.localRotation = Quaternion.Euler(35f, 0f, 0f);
+            }
+            else if (onLaptop)
+            {
+                // on the drawn laptop's screen, as tall as its display (the picture is square)
+                vrScreen.transform.localPosition = Vector3.zero;
+                vrScreen.transform.localRotation = Quaternion.identity;
+                vrScreen.transform.localScale = Vector3.one * (LaptopMarker.DisplaySize.y / 0.26f);
             }
             else
             {
@@ -371,7 +381,7 @@ namespace Eosat1
             if (display == SatCameraDisplay.Off) app.Say("Satellite camera view off");
             else if (headset && vrScreen == null) app.Say("Satellite camera: no screen could be made (shader EOSAT1/Screen missing)");
             else app.Say(headset ? (MenuSettings.UseControllers ? "Satellite camera: on the screen above your right hand"
-                                                                : "Satellite camera: on the screen low and to your right ([ ] to zoom)")
+                                                                : "Satellite camera: on the laptop's screen, or low and to your right if the laptop isn't set (J)")
                                  : (display == SatCameraDisplay.Inset ? "Satellite camera: corner picture (C again for full screen)"
                                                                        : "Satellite camera: full screen (wheel or [ ] to zoom)"));
         }

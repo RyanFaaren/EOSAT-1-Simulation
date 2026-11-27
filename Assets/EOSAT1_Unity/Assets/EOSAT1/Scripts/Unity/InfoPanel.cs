@@ -131,15 +131,50 @@ namespace Eosat1
         void Update()
         {
             bool headset = UnityEngine.XR.XRSettings.isDeviceActive;
+            // controllers off (K): the panel stands beside the laptop drawn in the headset, as there's no hand to hold it
+            bool beside = headset && PlaceBesideLaptop();
             // in the headset the panel on the left controller comes up by itself when the link is weak
             // (unless the wrist info pad has taken over: then the wrist screen blinks instead)
-            bool wantPanel = headset && !wristPadTakesOver && (showInHeadset || linkWarning != null);
+            bool wantPanel = headset && (beside || !wristPadTakesOver) && (showInHeadset || linkWarning != null);
             if (worldPanel != null && worldPanel.activeSelf != wantPanel) worldPanel.SetActive(wantPanel);
             Visible = headset ? showInHeadset : showOnScreen;
             if (Time.unscaledTime < nextRefresh || app == null) return;
             nextRefresh = Time.unscaledTime + refreshInterval;
             Build(app);
-            if (worldText != null && headset && !wristPadTakesOver) worldText.text = text;
+            if (worldText != null && headset && (beside || !wristPadTakesOver)) worldText.text = text;
+        }
+
+        // where the panel hangs normally (the left controller), to put it back
+        Transform homeParent;
+        Vector3 homePosition;
+        Quaternion homeRotation;
+        bool homeKnown;
+
+        /// <summary>
+        /// With the headset controllers off and the laptop set (J), stand the panel beside the drawn
+        /// laptop; otherwise put it back on the left controller. True while it is beside the laptop.
+        /// </summary>
+        bool PlaceBesideLaptop()
+        {
+            if (worldPanel == null) return false;
+            Transform t = worldPanel.transform;
+            if (!homeKnown)
+            {
+                homeParent = t.parent;
+                homePosition = t.localPosition;
+                homeRotation = t.localRotation;
+                homeKnown = true;
+            }
+            Transform screen, side = null;
+            bool beside = !MenuSettings.UseControllers && LaptopMarker.Current != null && LaptopMarker.Current.TryGetAnchors(out screen, out side);
+            Transform want = beside ? side : homeParent;
+            if (t.parent != want)
+            {
+                t.SetParent(want, false);
+                t.localPosition = beside ? Vector3.zero : homePosition;
+                t.localRotation = beside ? Quaternion.identity : homeRotation;
+            }
+            return beside;
         }
 
         void OnGUI()

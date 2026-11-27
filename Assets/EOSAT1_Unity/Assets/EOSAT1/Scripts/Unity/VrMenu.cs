@@ -450,6 +450,21 @@ namespace Eosat1
         public void Open()
         {
             if (!built || rig.head == null) return;
+            root.localScale = Vector3.one;
+            Transform laptopScreen, side;
+            if (LookToPoint && LaptopMarker.Current != null && LaptopMarker.Current.TryGetAnchors(out laptopScreen, out side))
+            {
+                // controllers off: the menu comes up on the laptop's screen, shrunk to fit it,
+                // a little in front of the camera picture
+                float fit = Mathf.Min(LaptopMarker.DisplaySize.x / PanelSize.x, LaptopMarker.DisplaySize.y / PanelSize.y);
+                root.SetPositionAndRotation(laptopScreen.position - laptopScreen.forward * 0.008f, laptopScreen.rotation);
+                root.localScale = Vector3.one * fit;
+                root.gameObject.SetActive(true);
+                open = true;
+                everOpened = true;
+                Refresh();
+                return;
+            }
             Transform head = rig.head;
             Vector3 fwd = head.forward;
             fwd.y = 0f;
@@ -744,7 +759,7 @@ namespace Eosat1
             Quaternion targetRot;
             if (open)
             {
-                targetPos = root.position - root.up * (PanelSize.y * 0.5f + 0.075f) - root.forward * 0.03f;
+                targetPos = root.position - root.up * (PanelSize.y * 0.5f * root.localScale.y + 0.075f) - root.forward * 0.03f;
                 targetRot = root.rotation;
             }
             else

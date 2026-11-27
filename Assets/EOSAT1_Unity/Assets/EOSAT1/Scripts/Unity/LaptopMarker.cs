@@ -9,6 +9,10 @@
 //   3. No controller on the desk: sit at the laptop, look at its screen, J. A guess from your head.
 //   Shift + J hides / shows it.
 //
+// With the headset controllers switched off (K), the headset's screens appear on this laptop
+// instead of on your hands: the satellite camera on its screen, the VR menu (right-click) over
+// it, and the status panel standing beside it on the left, like a second monitor.
+//
 // What you see: the outline of the laptop (deck, touchpad, screen) and its keyboard drawn flat on
 // the deck, every key labelled, the keys the simulation uses lit up in cyan. It hangs on the
 // headset's tracking space (the room), not on the virtual world, so it stays on the real laptop
@@ -41,7 +45,37 @@ namespace Eosat1
         const string KeyHidden = "eosat1.vr.laptopHidden";
 
         Transform marker;
+        Transform screenAnchor, sideAnchor;
         Material mat;
+
+        /// <summary>The laptop marker of the scene (null until the VR rig has one).</summary>
+        public static LaptopMarker Current { get; private set; }
+
+        /// <summary>
+        /// Where the headset's screens go when the controllers are off: 'screen' is the middle of the
+        /// drawn laptop's screen, 'side' a spot beside it on the left. Both face you (their forward
+        /// points away from you, into the screen). False while the laptop isn't set, is hidden
+        /// (Shift + J), or no headset is in use.
+        /// </summary>
+        public bool TryGetAnchors(out Transform screen, out Transform side)
+        {
+            screen = screenAnchor;
+            side = sideAnchor;
+            return marker != null && marker.gameObject.activeInHierarchy && screen != null && side != null;
+        }
+
+        /// <summary>Usable size of the laptop's display, metres (a Legion 7 16": 16:10, about 34.5 x 21.5 cm).</summary>
+        public static readonly Vector2 DisplaySize = new Vector2(0.345f, 0.215f);
+
+        void OnEnable()
+        {
+            Current = this;
+        }
+
+        void OnDisable()
+        {
+            if (Current == this) Current = null;
+        }
         Material[] keyMats;
 
         bool hasPose;
@@ -357,6 +391,18 @@ namespace Eosat1
             screen.localPosition = new Vector3(0f, 0f, back);
             screen.localRotation = Quaternion.Euler(-75f, 0f, 0f);
             Rect3(screen, new Vector3(0f, 0f, h * 0.5f), w, h, t);
+
+            // where the headset's screens go when the controllers are off: on the laptop's screen,
+            // and beside it on the left; turned to face you (forward = into the screen, up = up the lid)
+            Quaternion facing = Quaternion.LookRotation(Vector3.down, Vector3.forward);
+            screenAnchor = new GameObject("Screen Anchor").transform;
+            screenAnchor.SetParent(screen, false);
+            screenAnchor.localPosition = new Vector3(0f, 0.004f, h * 0.5f);
+            screenAnchor.localRotation = facing;
+            sideAnchor = new GameObject("Side Anchor").transform;
+            sideAnchor.SetParent(screen, false);
+            sideAnchor.localPosition = new Vector3(-(w * 0.5f + 0.2f), 0.004f, h * 0.5f);
+            sideAnchor.localRotation = facing;
 
             marker.gameObject.SetActive(false);
         }
