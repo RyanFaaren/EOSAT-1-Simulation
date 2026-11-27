@@ -295,6 +295,32 @@ namespace Eosat1
             vrScreen.SetActive(false);
         }
 
+        /// <summary>
+        /// The headset's camera screen hangs above the right controller. With the controllers
+        /// switched off (Settings, or K) the controller isn't drawn, so the screen floats in front
+        /// of you instead, low and to the right, and turns with your head.
+        /// </summary>
+        void PlaceVrScreen()
+        {
+            if (rig == null) return;
+            bool onHand = MenuSettings.UseControllers && rig.rightHand != null;
+            Transform want = onHand ? rig.rightHand : rig.head;
+            if (want == null || vrScreen.transform.parent == want) return;
+            vrScreen.transform.SetParent(want, false);
+            if (onHand)
+            {
+                vrScreen.transform.localPosition = new Vector3(0f, 0.16f, 0.08f);
+                vrScreen.transform.localRotation = Quaternion.Euler(35f, 0f, 0f);
+            }
+            else
+            {
+                // 26 cm square, 60 cm away: low and right of where you look, tilted to face you
+                vrScreen.transform.localPosition = new Vector3(0.2f, -0.14f, 0.6f);
+                vrScreen.transform.localRotation = Quaternion.Euler(12f, 18f, 0f);
+            }
+            vrScreen.layer = HiddenFromSatCameraLayer;   // never in the satellite camera's own picture
+        }
+
         void HideOverlaysFromSatCamera()
         {
             // the picture should show the Earth, not the helpers drawn around the spacecraft
@@ -344,7 +370,8 @@ namespace Eosat1
             ApplyState();
             if (display == SatCameraDisplay.Off) app.Say("Satellite camera view off");
             else if (headset && vrScreen == null) app.Say("Satellite camera: no screen could be made (shader EOSAT1/Screen missing)");
-            else app.Say(headset ? "Satellite camera: on the screen above your right hand"
+            else app.Say(headset ? (MenuSettings.UseControllers ? "Satellite camera: on the screen above your right hand"
+                                                                : "Satellite camera: on the screen low and to your right ([ ] to zoom)")
                                  : (display == SatCameraDisplay.Inset ? "Satellite camera: corner picture (C again for full screen)"
                                                                        : "Satellite camera: full screen (wheel or [ ] to zoom)"));
         }
@@ -442,6 +469,7 @@ namespace Eosat1
         void UpdateSatCamera(bool headset)
         {
             bool on = display != SatCameraDisplay.Off && !space.overview && app.State.Valid;
+            if (vrScreen != null && headset) PlaceVrScreen();
             if (vrScreen != null && vrScreen.activeSelf != (on && headset)) vrScreen.SetActive(on && headset);
             if (satCamera == null) return;
             if (!on)
