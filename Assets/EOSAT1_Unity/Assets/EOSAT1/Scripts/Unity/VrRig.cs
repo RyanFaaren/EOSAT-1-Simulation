@@ -136,6 +136,7 @@ namespace Eosat1
         void Update()
         {
             bool active = XRSettings.isDeviceActive;
+            if (!active) LockMouseToHead(false);
             // Settings > Headset controllers off: the headset only looks around; no gloves, no buttons
             bool controllers = MenuSettings.UseControllers;
             SetActive(leftHand, active && controllers);
@@ -153,15 +154,41 @@ namespace Eosat1
                 Ray probe;
                 if (!TryGetPointerRay(true, out probe)) TryGetPointerRay(false, out probe);
             }
+            LockMouseToHead(!controllers);
             if (!controllers)
             {
-                if (menu != null && menu.IsOpen) menu.Close();
+                // the mouse follows your head: right-click opens the VR menu in front of you,
+                // look at a button and left-click to press it
+                if (menu != null && !HudStyle.ModalActive)
+                {
+                    if (InputShim.MouseDown(1)) menu.Toggle();
+                    else if (InputShim.MouseDown(0) && menu.IsOpen) menu.ClickWhereLooking();
+                }
                 if (jetpack != null && head != null) jetpack.Fly(Vector2.zero, 0f, Time.unscaledDeltaTime);   // coast to a stop
                 Buttons(false);   // keeps track of held buttons so switching back on doesn't fire them
                 return;
             }
             Locomotion();
             Buttons(true);
+        }
+
+        bool mouseLocked;
+
+        /// <summary>
+        /// Controllers off: the laptop's mouse pointer is locked (hidden, in the middle of the window) so
+        /// a click can't land on a laptop button you can't see; clicks act where you look instead.
+        /// </summary>
+        void LockMouseToHead(bool on)
+        {
+            if (on == mouseLocked) return;
+            mouseLocked = on;
+            Cursor.lockState = on ? CursorLockMode.Locked : CursorLockMode.None;
+            Cursor.visible = !on;
+        }
+
+        void OnDestroy()
+        {
+            LockMouseToHead(false);
         }
 
         [BeforeRenderOrder(100)]

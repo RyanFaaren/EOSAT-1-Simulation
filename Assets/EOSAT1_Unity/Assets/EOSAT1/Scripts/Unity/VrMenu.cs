@@ -535,8 +535,21 @@ namespace Eosat1
             ShowPointer(hasRay, ray, hit);
         }
 
+        /// <summary>Controllers switched off (Settings, or K): you point with your head.</summary>
+        static bool LookToPoint { get { return !MenuSettings.UseControllers; } }
+
         bool PointerRay(out Ray ray)
         {
+            if (LookToPoint)
+            {
+                if (rig.head == null)
+                {
+                    ray = default(Ray);
+                    return false;
+                }
+                ray = new Ray(rig.head.position, rig.head.forward);
+                return true;
+            }
             if (rig.TryGetPointerRay(useRight, out ray)) return true;
             if (rig.TryGetPointerRay(!useRight, out ray))
             {
@@ -569,7 +582,8 @@ namespace Eosat1
 
         void ShowPointer(bool hasRay, Ray ray, float length)
         {
-            if (laser.gameObject.activeSelf != hasRay) laser.gameObject.SetActive(hasRay);
+            bool beam = hasRay && !LookToPoint;   // pointing with your head: just the dot, no beam
+            if (laser.gameObject.activeSelf != beam) laser.gameObject.SetActive(beam);
             if (reticle.gameObject.activeSelf != hasRay) reticle.gameObject.SetActive(hasRay);
             if (!hasRay) return;
             length = Mathf.Max(0.05f, length - 0.01f);
@@ -579,6 +593,18 @@ namespace Eosat1
             reticle.SetPositionAndRotation(ray.origin + ray.direction * length, root.rotation);
             float s = hovered != null && hovered.Enabled ? 1.5f : 1f;
             reticle.localScale = new Vector3(0.022f * s, 0.022f * s, 1f);
+        }
+
+        /// <summary>Left mouse click with the controllers off: press the button you are looking at.</summary>
+        public void ClickWhereLooking()
+        {
+            if (!built || !open || rig.head == null) return;
+            var ray = new Ray(rig.head.position, rig.head.forward);
+            float d = 1.5f;
+            MenuButton b = Pick(ray, ref d);
+            if (b == null || !b.Enabled || b.OnClick == null) return;
+            b.OnClick();
+            if (open) Refresh();
         }
 
         /// <summary>A trigger was pulled (VrRig calls this while the menu is open).</summary>
