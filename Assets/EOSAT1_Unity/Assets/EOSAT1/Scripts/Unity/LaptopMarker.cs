@@ -4,13 +4,10 @@
 // laptop's screen, and press J. For an exact fit, lay the controllers flat on the keyboard first:
 // the left one on the left Shift key and the right one on the right Shift key (or one controller
 // on each in turn, pressing J each time). A glowing outline of a laptop is then
-// drawn where the real one is, with a "LAPTOP" label, in the headset only. On it lies a drawn
-// keyboard, every key labelled, with the keys the simulation uses lit up in cyan. It stays put in the
+// drawn where the real one is, in the headset only. On it lies a drawn keyboard, every key
+// labelled, with the keys the simulation uses lit up in cyan. It stays put in the
 // real room however you fly, turn or jump between viewpoints, because it hangs on the
 // headset's tracking space (the room), not on the virtual world.
-//
-// Above it floats a key card: every key and what it does, so you can work the simulation from
-// the keyboard without seeing the laptop's screen (its buttons can't be aimed at in the headset).
 //
 //   J          set the laptop here (again any time, e.g. after moving the chair)
 //   Shift + J  hide / show the outline
@@ -37,41 +34,9 @@ namespace Eosat1
         const string KeyHidden = "eosat1.vr.laptopHidden";
 
         Transform marker;
-        Material mat, cardMat;
+        Material mat;
         Material[] keyMats;
-        GameObject focusWarning;
 
-        // the key card, in two columns (proportional font: no lining up with spaces)
-        static readonly string[] CardLeft =
-        {
-            "<b>TIME</b>",
-            "Space   pause / play",
-            "=  -   faster / slower",
-            "\u2192  \u2190   skip 1 minute",
-            "Backspace   start again",
-            "<b>SATELLITE</b> (Sandbox)",
-            "1  2   open solar panels",
-            "3   open the antenna",
-            "6  7   fold panels / antenna",
-            "4  5   jam antenna / panel",
-            "N  S   point at Earth / Sun",
-            "R  T   imaging roll / tumble",
-        };
-        static readonly string[] CardRight =
-        {
-            "<b>VIEWS</b>",
-            "Z   whole Earth",
-            "C   satellite camera   [ ]  zoom",
-            "V  F   next / first viewpoint",
-            "G  B   body axes / camera line",
-            "O  P   orbit path / panel line",
-            "<b>PANELS AND SETTINGS</b>",
-            "H   status panel (laptop)",
-            "M   data source",
-            "K   headset controllers on / off",
-            "J   laptop is here   Shift+J  hide",
-            "Esc   main menu",
-        };
         bool hasPose;
         Vector3 posePosition;
         float poseYaw;
@@ -273,9 +238,6 @@ namespace Eosat1
             marker.localPosition = posePosition;
             marker.localRotation = Quaternion.Euler(0f, poseYaw, 0f);
             // a slow, gentle pulse so it reads as a guide, not part of the space scene
-            // keys only reach the simulation while its window has the focus: say so where they look
-            bool lost = !InputShim.KeyboardReaches;
-            if (focusWarning != null && focusWarning.activeSelf != lost) focusWarning.SetActive(lost);
             Color c = color * (0.75f + 0.25f * Mathf.Sin(Time.unscaledTime * 2f));
             c.a = 1f;
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
@@ -316,64 +278,6 @@ namespace Eosat1
             screen.localRotation = Quaternion.Euler(-75f, 0f, 0f);
             Rect3(screen, new Vector3(0f, 0f, h * 0.5f), Quaternion.identity, w, h, t);
 
-            // label above the screen
-            var label = new GameObject("Label");
-            label.transform.SetParent(marker, false);
-            label.transform.localPosition = new Vector3(0f, h + 0.08f, back);
-            var tm = label.AddComponent<TextMesh>();
-            if (f != null)
-            {
-                tm.font = f;
-                label.GetComponent<MeshRenderer>().sharedMaterial = f.material;
-            }
-            tm.text = "LAPTOP";
-            tm.fontSize = 48;
-            tm.characterSize = 0.006f;
-            tm.anchor = TextAnchor.MiddleCenter;
-            tm.alignment = TextAlignment.Center;
-            tm.color = color;
-            label.AddComponent<FaceCamera>();
-
-            // the key card: a dark panel standing above the laptop's screen, facing you
-            cardMat = new Material(sh) { name = "EOSAT1 Laptop Key Card (runtime)" };
-            Color cardColor = new Color(0.02f, 0.05f, 0.09f, 1f);
-            if (cardMat.HasProperty("_BaseColor")) cardMat.SetColor("_BaseColor", cardColor);
-            if (cardMat.HasProperty("_Color")) cardMat.SetColor("_Color", cardColor);
-            var card = new GameObject("Key Card").transform;
-            card.SetParent(marker, false);
-            card.localPosition = new Vector3(0f, h + 0.3f, back + 0.06f);
-            card.localRotation = Quaternion.Euler(-12f, 0f, 0f);   // leaning back a little, towards your eyes
-            GameObject panel = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            panel.name = "Backing";
-            Destroy(panel.GetComponent<Collider>());
-            panel.transform.SetParent(card, false);
-            panel.transform.localPosition = new Vector3(0f, 0f, 0.004f);
-            panel.transform.localScale = new Vector3(0.58f, 0.33f, 1f);
-            Renderer pr = panel.GetComponent<Renderer>();
-            pr.sharedMaterial = cardMat;
-            pr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            pr.receiveShadows = false;
-            Rect3(card, Vector3.zero, Quaternion.Euler(-90f, 0f, 0f), 0.58f, 0.33f, 0.004f);   // cyan frame
-            CardText(card, f, "<b>KEYS</b>   (easier than aiming the mouse in the headset)", new Vector3(-0.27f, 0.145f, 0f), 0.0034f, new Color(0.3f, 0.95f, 1f, 1f));
-            CardText(card, f, string.Join("\n", CardLeft), new Vector3(-0.27f, 0.105f, 0f), 0.003f, new Color(0.85f, 0.95f, 1f, 1f));
-            var warn = new GameObject("Keyboard Warning");
-            warn.transform.SetParent(card, false);
-            warn.transform.localPosition = new Vector3(0f, -0.19f, -0.002f);
-            var wt = warn.AddComponent<TextMesh>();
-            if (f != null)
-            {
-                wt.font = f;
-                warn.GetComponent<MeshRenderer>().sharedMaterial = f.material;
-            }
-            wt.text = "KEYBOARD NOT CONNECTED: click the Unity window on the laptop once";
-            wt.fontSize = 48;
-            wt.characterSize = 0.0036f;
-            wt.anchor = TextAnchor.UpperCenter;
-            wt.alignment = TextAlignment.Center;
-            wt.color = new Color(1f, 0.4f, 0.35f, 1f);
-            focusWarning = warn;
-            focusWarning.SetActive(false);
-            CardText(card, f, string.Join("\n", CardRight), new Vector3(0.01f, 0.105f, 0f), 0.003f, new Color(0.85f, 0.95f, 1f, 1f));
             marker.gameObject.SetActive(false);
         }
 
@@ -391,7 +295,7 @@ namespace Eosat1
             new[] { "Ctrl", "1.5", "Fn", "1", "Win", "1", "Alt", "1", "Space", "5", "Alt", "1", "Ctrl", "1", "←", "1", "↑↓", "1", "→", "1.5" },
         };
 
-        // the keys that do something in the simulation (the key card lists them)
+        // the keys that do something in the simulation (lit up in cyan)
         const string Used = " Esc F1 1 2 3 4 5 6 7 - = Bksp Tab R T O P [ ] S F G H J K L Z C V B N M , . Shift Space ← → ";
 
         static bool IsUsed(string key)
@@ -470,27 +374,6 @@ namespace Eosat1
             if (m.HasProperty("_Color")) m.SetColor("_Color", c);
         }
 
-        static void CardText(Transform card, Font f, string text, Vector3 pos, float size, Color color)
-        {
-            var go = new GameObject("Card Text");
-            go.transform.SetParent(card, false);
-            go.transform.localPosition = pos;
-            var tm = go.AddComponent<TextMesh>();
-            if (f != null)
-            {
-                tm.font = f;
-                go.GetComponent<MeshRenderer>().sharedMaterial = f.material;
-            }
-            tm.richText = true;
-            tm.text = text;
-            tm.fontSize = 48;
-            tm.characterSize = size;
-            tm.lineSpacing = 1.15f;
-            tm.anchor = TextAnchor.UpperLeft;
-            tm.alignment = TextAlignment.Left;
-            tm.color = color;
-        }
-
         /// <summary>A rectangle of thin bars lying in the local XZ plane (width along X, depth along Z).</summary>
         void Rect3(Transform parent, Vector3 centre, Quaternion rot, float width, float depth, float bar)
         {
@@ -518,7 +401,6 @@ namespace Eosat1
         void OnDestroy()
         {
             if (mat != null) Destroy(mat);
-            if (cardMat != null) Destroy(cardMat);
             if (keyMats != null) foreach (Material m in keyMats) if (m != null) Destroy(m);
         }
     }
