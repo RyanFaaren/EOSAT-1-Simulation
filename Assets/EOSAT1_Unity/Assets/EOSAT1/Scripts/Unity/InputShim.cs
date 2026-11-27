@@ -18,6 +18,9 @@ namespace Eosat1
         /// </summary>
         public static bool KeyboardReaches { get { return Application.isFocused; } }
 
+        /// <summary>Either Ctrl key is down. Ctrl + keys fine-tune the laptop drawn in the headset, so other keys ignore them.</summary>
+        public static bool Ctrl { get { return Held(KeyCode.LeftControl) || Held(KeyCode.RightControl); } }
+
 #if !ENABLE_LEGACY_INPUT_MANAGER && ENABLE_INPUT_SYSTEM
         /// <summary>
         /// With a headset on you can't see which Unity panel has the focus, and by default the new
@@ -172,6 +175,8 @@ namespace Eosat1
                 case KeyCode.Comma: return Key.Comma;
                 case KeyCode.Period: return Key.Period;
                 case KeyCode.LeftShift: return Key.LeftShift;
+                case KeyCode.LeftControl: return Key.LeftCtrl;
+                case KeyCode.RightControl: return Key.RightCtrl;
                 case KeyCode.RightShift: return Key.RightShift;
                 case KeyCode.Home: return Key.Home;
                 case KeyCode.F1: return Key.F1;

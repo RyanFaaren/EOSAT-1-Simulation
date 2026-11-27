@@ -562,8 +562,8 @@ namespace Eosat1
             if (keys && InputShim.Down(KeyCode.P)) TogglePanelAxes();
             if (keys && display != SatCameraDisplay.Off)
             {
-                if (InputShim.Down(KeyCode.LeftBracket)) ZoomSatCamera(-1f);
-                if (InputShim.Down(KeyCode.RightBracket)) ZoomSatCamera(1f);
+                if (InputShim.Down(KeyCode.LeftBracket) && !InputShim.Ctrl) ZoomSatCamera(-1f);   // Ctrl + [ ] turn the drawn laptop
+                if (InputShim.Down(KeyCode.RightBracket) && !InputShim.Ctrl) ZoomSatCamera(1f);
             }
             bool wheelZoomsCamera = !headset && display == SatCameraDisplay.Full;
             if (desktop != null) desktop.WheelBusy = wheelZoomsCamera;

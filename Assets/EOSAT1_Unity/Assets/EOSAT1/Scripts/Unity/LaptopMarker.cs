@@ -8,6 +8,11 @@
 //   2. One controller: against the left side, J; then against the right side, J.
 //   3. No controller on the desk: sit at the laptop, look at its screen, J. A guess from your head.
 //   Shift + J hides / shows it.
+//   Fine-tuning, if the drawn keys sit a little off the real ones:
+//     Ctrl + arrows            move it left / right / away / towards you
+//     Ctrl + Shift + up/down   raise / lower it
+//     Ctrl + [ ]               turn it
+//   Hold for longer moves; it is saved when you let go.
 //
 // With the headset controllers switched off (K), the headset's screens appear on this laptop
 // instead of on your hands: the satellite camera on its screen, the VR menu (right-click) over
@@ -81,6 +86,13 @@ namespace Eosat1
         bool hasPose;
         Vector3 posePosition;   // the middle of the keyboard, on its middle row (A S D F ...)
         float poseYaw;
+
+        // fine-tuning (Ctrl + arrows): unsaved changes, and whether the how-to has been shown
+        bool nudged, nudgeHintShown;
+        const float NudgeSpeed = 0.02f;      // metres per second while a key is held
+        const float NudgeTurnSpeed = 4f;     // degrees per second
+        const float NudgeStep = 0.002f;      // the first, single step of a press: 2 mm
+        const float NudgeTurnStep = 0.25f;   // and a quarter of a degree
 
         // one controller: the first press waits here for the second
         bool waitingForRight;
@@ -160,7 +172,7 @@ namespace Eosat1
             {
                 FitSides(onDesk[0], onDesk[1], fwd);
                 waitingForRight = false;
-                Save("Laptop set from the controllers on each side: the drawn keyboard sits on the real one");
+                Save("Laptop set from the controllers on each side. If the keys sit a little off, fine-tune with Ctrl + arrows");
                 return;
             }
             if (onDesk.Count >= 1)
@@ -171,7 +183,7 @@ namespace Eosat1
                 {
                     waitingForRight = false;
                     FitSides(leftSide, c, fwd);
-                    Save("Laptop set from both sides: the drawn keyboard sits on the real one");
+                    Save("Laptop set from both sides. If the keys sit a little off, fine-tune with Ctrl + arrows");
                     return;
                 }
                 waitingForRight = true;
@@ -185,7 +197,63 @@ namespace Eosat1
             waitingForRight = false;
             posePosition = guess;
             poseYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
-            Save("Laptop marked from where you sit (a guess). For an exact fit, lay a controller against each side of the laptop and press J");
+            Save("Laptop marked from where you sit (a guess). Lay a controller against each side and press J, or fine-tune with Ctrl + arrows");
+        }
+
+        /// <summary>
+        /// Ctrl + arrows (and Ctrl + Shift + up/down, Ctrl + [ ]) move the drawn laptop a little at a
+        /// time, along its own rows, so the drawn keys can be laid exactly on the real ones.
+        /// A tap moves 2 mm (or a quarter degree); holding keeps going.
+        /// </summary>
+        void Nudge()
+        {
+            if (!InputShim.Ctrl)
+            {
+                if (nudged)
+                {
+                    nudged = false;
+                    Save("Keyboard position saved");
+                }
+                return;
+            }
+            bool shift = InputShim.Held(KeyCode.LeftShift) || InputShim.Held(KeyCode.RightShift);
+            float dt = Time.unscaledDeltaTime;
+            Quaternion yaw = Quaternion.Euler(0f, poseYaw, 0f);
+            Vector3 across = yaw * Vector3.right, ahead = yaw * Vector3.forward;
+            Vector3 move = Vector3.zero;
+            float turn = 0f;
+
+            move += across * Axis(KeyCode.RightArrow, KeyCode.LeftArrow, NudgeStep, NudgeSpeed * dt);
+            float upDown = Axis(KeyCode.UpArrow, KeyCode.DownArrow, NudgeStep, NudgeSpeed * dt);
+            if (shift) move += Vector3.up * upDown;
+            else move += ahead * upDown;
+            turn += Axis(KeyCode.RightBracket, KeyCode.LeftBracket, NudgeTurnStep, NudgeTurnSpeed * dt);
+
+            if (move.sqrMagnitude < 1e-12f && Mathf.Abs(turn) < 1e-6f) return;
+            if (Mathf.Abs(turn) > 0f)
+            {
+                // turn about the keyboard's middle, so it doesn't swing away
+                poseYaw = Mathf.Repeat(poseYaw + turn + 180f, 360f) - 180f;
+            }
+            posePosition += move;
+            hasPose = true;
+            nudged = true;
+            if (!nudgeHintShown)
+            {
+                nudgeHintShown = true;
+                Say("Moving the keyboard: Ctrl + arrows, Ctrl + Shift + up/down for height, Ctrl + [ ] to turn. Let go of Ctrl to save");
+            }
+        }
+
+        /// <summary>+1 / -1 keys: a single step on the press, then steady movement while held.</summary>
+        static float Axis(KeyCode plus, KeyCode minus, float step, float held)
+        {
+            float v = 0f;
+            if (InputShim.Down(plus)) v += step;
+            else if (InputShim.Held(plus)) v += held;
+            if (InputShim.Down(minus)) v -= step;
+            else if (InputShim.Held(minus)) v -= held;
+            return v;
         }
 
         static Vector3 Flat(Vector3 v)
@@ -244,6 +312,8 @@ namespace Eosat1
                 else Say("No laptop set yet: lay a controller against each side of it and press J");
             }
 
+            if (headset && hasPose && !HudStyle.ModalActive) Nudge();
+
             bool show = headset && hasPose && PlayerPrefs.GetInt(KeyHidden, 0) == 0 && Room != null;
             if (show && marker == null) Build();
             if (marker == null) return;
@@ -283,7 +353,7 @@ namespace Eosat1
         };
 
         // the keys that do something in the simulation (the number pad's + and - change the speed too)
-        const string Used = " Esc F1 Home 1 2 3 4 5 6 7 - = Bksp Tab R T O P [ ] S F G H J K L Z C V B N M , . Shift Space ← → + − ";
+        const string Used = " Esc F1 Home 1 2 3 4 5 6 7 - = Bksp Tab R T O P [ ] S F G H J K L Z C V B N M , . Shift Ctrl Space ← → ↑ ↓ + − ";
 
         struct KeyCap
         {

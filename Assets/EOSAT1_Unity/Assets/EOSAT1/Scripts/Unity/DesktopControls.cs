@@ -165,8 +165,9 @@ namespace Eosat1
             if (InputShim.Down(KeyCode.Space)) app.TogglePause();
             if (InputShim.Down(KeyCode.Equals) || InputShim.Down(KeyCode.KeypadPlus) || InputShim.Down(KeyCode.Period)) app.SpeedUp();
             if (InputShim.Down(KeyCode.Minus) || InputShim.Down(KeyCode.KeypadMinus) || InputShim.Down(KeyCode.Comma)) app.SlowDown();
-            if (!shift && InputShim.Down(KeyCode.RightArrow)) app.JumpSeconds(60);
-            if (!shift && InputShim.Down(KeyCode.LeftArrow)) app.JumpSeconds(-60);
+            bool ctrl = InputShim.Ctrl;   // Ctrl + arrows move the laptop drawn in the headset (LaptopMarker)
+            if (!shift && !ctrl && InputShim.Down(KeyCode.RightArrow)) app.JumpSeconds(60);
+            if (!shift && !ctrl && InputShim.Down(KeyCode.LeftArrow)) app.JumpSeconds(-60);
             if (InputShim.Down(KeyCode.Backspace) || InputShim.Down(KeyCode.Home)) app.Restart();
 
             // commands (sandbox)
