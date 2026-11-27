@@ -11,17 +11,18 @@
 //                                                            explained, and a button for each
 // Right trigger body axes                       Left trigger camera line
 //   (while the VR menu is open, either trigger presses the button you point at)
-// Right grip   whole Earth / back               Right stick click  satellite camera screen
+// Right grip   whole Earth / back               Right stick click  satellite camera on / off
 // Left stick click  orbit path on/off
 // Left wrist  turn it towards you, like checking a watch: the info pad pops out of it
+// Right wrist the same, while the satellite camera is on: its picture pops out
 // The VR menu has a button for everything else the computer can do (every speed, the
 // computer's viewpoints, view frame, data source, satellite camera zoom).
 // Commands only act in Sandbox mode; with the simulator they come from mission control.
 //
 // In the simulation the rig also carries space gloves (VrHands), the VR menu and messages
-// (VrMenu), the jetpack (VrJetpack) and the info pad on the left wrist (VrWristPad). It adds
-// them by itself at start, so an existing scene needs no rebuild. The main menu room uses the
-// same rig with the gloves only.
+// (VrMenu), the jetpack (VrJetpack), the info pad on the left wrist (VrWristPad) and the
+// satellite camera on the right wrist (VrWristCamera). It adds them by itself at start, so an
+// existing scene needs no rebuild. The main menu room uses the same rig with the gloves only.
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR;
@@ -53,6 +54,7 @@ namespace Eosat1
         public VrMenu Menu { get { return menu; } }
         public VrJetpack Jetpack { get { return jetpack; } }
         public VrWristPad WristPad { get { return wristPad; } }
+        public VrWristCamera WristCamera { get { return wristCamera; } }
 
         /// <summary>
         /// Does the runtime report the controller's "grip" pose (OpenXR: the handle along Z) rather
@@ -84,6 +86,7 @@ namespace Eosat1
         VrMenu menu;
         VrJetpack jetpack;
         VrWristPad wristPad;
+        VrWristCamera wristCamera;
         Vector3 homePosition;
         Quaternion homeRotation;
         float nextOriginCheck;
@@ -120,6 +123,9 @@ namespace Eosat1
                 wristPad = GetComponent<VrWristPad>();
                 if (wristPad == null) wristPad = gameObject.AddComponent<VrWristPad>();
                 wristPad.rig = this;
+                wristCamera = GetComponent<VrWristCamera>();
+                if (wristCamera == null) wristCamera = gameObject.AddComponent<VrWristCamera>();
+                wristCamera.rig = this;
             }
         }
 

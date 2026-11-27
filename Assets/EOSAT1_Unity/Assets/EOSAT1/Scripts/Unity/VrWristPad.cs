@@ -177,7 +177,7 @@ namespace Eosat1
                 textMaterial.SetTexture("_MainTex", font.material.mainTexture);
         }
 
-        static Font LoadFont()
+        public static Font LoadFont()
         {
             Font f = null;
             try { f = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); }
@@ -403,7 +403,7 @@ namespace Eosat1
             content.localPosition = new Vector3(-W * 0.5f, h, -0.003f);
         }
 
-        static void SetLayer(GameObject go)
+        public static void SetLayer(GameObject go)
         {
             Transform[] all = go.GetComponentsInChildren<Transform>(true);
             for (int i = 0; i < all.Length; i++) all[i].gameObject.layer = ViewDirector.HiddenFromSatCameraLayer;
@@ -525,7 +525,7 @@ namespace Eosat1
         }
 
         /// <summary>A thin strip from 'from' to 'to', turned to face the eye.</summary>
-        static void PlaceBeam(Transform beam, Vector3 from, Vector3 to, Vector3 eye)
+        public static void PlaceBeam(Transform beam, Vector3 from, Vector3 to, Vector3 eye)
         {
             Vector3 d = to - from;
             float length = d.magnitude;
@@ -544,7 +544,7 @@ namespace Eosat1
         }
 
         /// <summary>0 -> 1 with a small overshoot at the end: the pop.</summary>
-        static float EaseOutBack(float t)
+        public static float EaseOutBack(float t)
         {
             const float c1 = 1.3f;
             const float c3 = c1 + 1f;
@@ -666,7 +666,7 @@ namespace Eosat1
             }
         }
 
-        static Color WithAlpha(Color c, float a)
+        public static Color WithAlpha(Color c, float a)
         {
             return new Color(c.r, c.g, c.b, a);
         }

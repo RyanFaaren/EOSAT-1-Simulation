@@ -3,7 +3,8 @@
 //   Satellite camera (C)  what the DragonEye imagers see: a camera on the camera face
 //                         looking along the boresight (body +Z), flight direction at the top
 //                         of the picture. Desktop: off -> small picture in the corner ->
-//                         full screen. Headset: a screen on the right controller.
+//                         full screen. Headset: on the right wrist (VrWristCamera): look at
+//                         it like a watch and the picture pops out.
 //                         Mouse wheel (full screen) or [ ] zooms, down to the real field of
 //                         view: the two imagers together cover a 44 km wide strip from 500 km.
 //   Whole Earth (Z)       zooms out: the Earth as a globe with the spacecraft going round it
@@ -82,8 +83,19 @@ namespace Eosat1
         readonly System.Collections.Generic.List<GameObject> panelAxes = new System.Collections.Generic.List<GameObject>();
         Mesh arrowMesh;
         Material arrowMaterial;
-        string cameraLabel = "", cameraLabelShort = "";
+        string cameraLabel = "", cameraLabelShort = "", headsetHeader = "", headsetFooter = "";
         float nextLabel;
+
+        /// <summary>Set by VrWristCamera: the picture pops out of the right wrist instead of floating over the right controller.</summary>
+        [System.NonSerialized] public bool wristCameraTakesOver;
+        /// <summary>The satellite camera's picture (null until it has been on once).</summary>
+        public RenderTexture CameraPicture { get { return target; } }
+        /// <summary>True while the satellite camera is drawing (on, not in the whole-Earth view, with data).</summary>
+        public bool CameraLive { get { return satCamera != null && satCamera.enabled && target != null; } }
+        /// <summary>For the headset's wrist camera: how wide the view is and how much ground that covers.</summary>
+        public string HeadsetHeader { get { return headsetHeader; } }
+        /// <summary>For the headset's wrist camera: off nadir, the real view, eclipse (rich text).</summary>
+        public string HeadsetFooter { get { return headsetFooter; } }
 
         static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
 
@@ -343,6 +355,7 @@ namespace Eosat1
             if (display != SatCameraDisplay.Off && space.overview) space.overview = false;
             ApplyState();
             if (display == SatCameraDisplay.Off) app.Say("Satellite camera view off");
+            else if (headset && wristCameraTakesOver) app.Say("Satellite camera on: look at your right wrist, like checking a watch");
             else if (headset && vrScreen == null) app.Say("Satellite camera: no screen could be made (shader EOSAT1/Screen missing)");
             else app.Say(headset ? "Satellite camera: on the screen above your right hand"
                                  : (display == SatCameraDisplay.Inset ? "Satellite camera: corner picture (C again for full screen)"
@@ -442,7 +455,9 @@ namespace Eosat1
         void UpdateSatCamera(bool headset)
         {
             bool on = display != SatCameraDisplay.Off && !space.overview && app.State.Valid;
-            if (vrScreen != null && vrScreen.activeSelf != (on && headset)) vrScreen.SetActive(on && headset);
+            // the old screen over the right controller, only when the right wrist can't show the picture
+            bool floating = on && headset && !wristCameraTakesOver;
+            if (vrScreen != null && vrScreen.activeSelf != floating) vrScreen.SetActive(floating);
             if (satCamera == null) return;
             if (!on)
             {
@@ -504,6 +519,10 @@ namespace Eosat1
             cameraLabel = text;
             cameraLabelShort = "<b><color=" + HudStyle.AccentHex + ">DRAGONEYE</color></b>   " + fieldOfViewDeg.ToString("0.0", Inv) + " deg"
                                + (offNadir < 60.0 ? "   " + across.ToString("0", Inv) + " km across" : "");
+            headsetHeader = fieldOfViewDeg.ToString("0.0", Inv) + "\u00b0 wide"
+                            + (offNadir < 60.0 ? "  \u00b7  " + across.ToString("0", Inv) + " km across" : "");
+            headsetFooter = offNadir.ToString("0.0", Inv) + "\u00b0 off nadir" + (atTrue ? "  \u00b7  the real view" : "")
+                            + (space.Illumination < 0.5 ? "  \u00b7  <color=" + HudStyle.WarnHex + ">ECLIPSE</color>" : "");
         }
 
         // ------------------------------------------------------------------ on screen (desktop)
