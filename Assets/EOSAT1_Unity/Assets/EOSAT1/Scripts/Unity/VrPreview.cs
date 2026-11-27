@@ -1,7 +1,8 @@
 // EOSAT-1 VR - the headset's view on the laptop, with no headset: for screenshots, for videos, and
 // for anyone at a demo who can't or doesn't want to wear the headset.
 //
-//   F9   switch it on / off (only while no headset is in use)
+//   F9 or `   switch it on / off (only while no headset is in use). ` is the key under Esc; on
+//             laptops whose F-keys do volume and brightness (Lenovo Legion), F9 needs Fn.
 //
 // The laptop's camera becomes a seated person's eyes at the spot the headset starts from: move the
 // mouse to look around. Everything behaves as in the headset with its controllers switched off:
@@ -94,7 +95,7 @@ namespace Eosat1
                 yaw = 0f;
                 pitch = -28f;
                 Active = true;
-                Say("Headset preview: move the mouse to look around. C camera, right-click menu, type to see keys glow. F9 leaves");
+                Say("Headset preview: move the mouse to look around. C camera, right-click menu, type to see keys glow. ` (or F9) leaves");
             }
             else
             {
@@ -117,7 +118,7 @@ namespace Eosat1
                 if (Active) SetActive(false);   // a real headset came on: it owns the view
                 return;
             }
-            if (!HudStyle.ModalActive && InputShim.Down(KeyCode.F9)) SetActive(!Active);
+            if (!HudStyle.ModalActive && (InputShim.Down(KeyCode.F9) || InputShim.Down(KeyCode.BackQuote))) SetActive(!Active);
         }
 
         void LateUpdate()

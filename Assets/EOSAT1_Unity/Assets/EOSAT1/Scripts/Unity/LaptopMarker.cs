@@ -649,7 +649,7 @@ namespace Eosat1
         };
 
         // the keys that do something in the simulation (the number pad's + and - change the speed too)
-        const string Used = " Esc F1 Home 1 2 3 4 5 6 7 - = Bksp Tab R T O P [ ] S F G H J K L Z C V B N M , . Shift Ctrl Space ← → ↑ ↓ + − ";
+        const string Used = " Esc F1 ` Home 1 2 3 4 5 6 7 - = Bksp Tab R T O P [ ] S F G H J K L Z C V B N M , . Shift Ctrl Space ← → ↑ ↓ + − ";
 
         struct KeyCap
         {

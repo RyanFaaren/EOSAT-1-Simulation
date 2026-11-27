@@ -181,6 +181,7 @@ namespace Eosat1
                 case KeyCode.Home: return Key.Home;
                 case KeyCode.F1: return Key.F1;
                 case KeyCode.F9: return Key.F9;
+                case KeyCode.BackQuote: return Key.Backquote;
                 case KeyCode.LeftBracket: return Key.LeftBracket;
                 case KeyCode.RightBracket: return Key.RightBracket;
                 default: return Key.None;
