@@ -99,6 +99,7 @@ namespace Eosat1
         {
             if (app == null) return;
             bool headset = XRSettings.isDeviceActive;
+            if (headset) PlaceVrBar();
             if (headset) UpdateVr();
             UpdateDesktop();   // the laptop's bar works with or without a headset in use
             if (vrRoot != null && vrRoot.activeSelf != headset) vrRoot.SetActive(headset);
@@ -199,7 +200,12 @@ namespace Eosat1
         // ------------------------------------------------------------------ headset
         GameObject vrRoot;
         Transform vrTrack, vrFill, vrKnob;
-        TextMesh vrLabel;
+        TextMesh vrLabel, vrHow;
+        // controllers off: the bar sits on the laptop drawn in the headset (under the status panel)
+        bool barOnLaptop, mouseDragging3d;
+        Transform barHomeParent;
+        Vector3 barHomePosition, barHomeScale;
+        Quaternion barHomeRotation;
         LineRenderer vrLaser;
         Material fillMaterial, knobMaterial, textMaterial;
         Font font;
@@ -243,7 +249,7 @@ namespace Eosat1
             Font.textureRebuilt += OnFontRebuilt;
 
             vrLabel = Text("Label", r, new Vector3(-w * 0.5f, 0.027f, 0f), "", 0.011f, Color.white, TextAnchor.MiddleLeft);
-            Text("How", r, new Vector3(w * 0.5f, 0.027f, 0f), "point + hold right grip", 0.0075f, new Color(0.6f, 0.7f, 0.8f), TextAnchor.MiddleRight);
+            vrHow = Text("How", r, new Vector3(w * 0.5f, 0.027f, 0f), "point + hold right grip", 0.0075f, new Color(0.6f, 0.7f, 0.8f), TextAnchor.MiddleRight);
             for (int i = 0; i < Steps; i++)
             {
                 float x = -w * 0.5f + w * PositionOf(i);
@@ -278,8 +284,74 @@ namespace Eosat1
             if (f == font && textMaterial != null && f.material != null) textMaterial.SetTexture("_MainTex", f.material.mainTexture);
         }
 
+        /// <summary>
+        /// Controllers off (K) and the laptop set (J): the bar moves under the status panel beside the
+        /// drawn laptop, with the other screens. Back where it was (the left controller or the wrist
+        /// pad) when the controllers come back.
+        /// </summary>
+        void PlaceVrBar()
+        {
+            if (vrRoot == null) return;
+            Transform t = vrRoot.transform;
+            Transform screen, side = null;
+            bool want = !MenuSettings.UseControllers && LaptopMarker.Current != null && LaptopMarker.Current.TryGetAnchors(out screen, out side);
+            if (want)
+            {
+                if (t.parent != side)
+                {
+                    // (again, if the wrist pad docked it meanwhile: that becomes where it goes back to)
+                    barHomeParent = t.parent;
+                    barHomePosition = t.localPosition;
+                    barHomeRotation = t.localRotation;
+                    barHomeScale = t.localScale;
+                    t.SetParent(side, false);
+                    t.localPosition = new Vector3(0f, -0.115f, 0f);   // under the 14 cm status panel
+                    t.localRotation = Quaternion.identity;
+                    t.localScale = Vector3.one;
+                }
+            }
+            else if (barOnLaptop && barHomeParent != null)
+            {
+                t.SetParent(barHomeParent, false);
+                t.localPosition = barHomePosition;
+                t.localRotation = barHomeRotation;
+                t.localScale = barHomeScale;
+            }
+            barOnLaptop = want;
+            if (vrHow != null)
+            {
+                string how = want ? "look at it + hold left click" : "point + hold right grip";
+                if (vrHow.text != how) vrHow.text = how;
+            }
+        }
+
+        /// <summary>On the laptop: look at the bar, hold the left mouse button and look along it.</summary>
+        void UpdateBarByLooking()
+        {
+            HoldsRightGrip = false;
+            if (vrLaser != null) vrLaser.enabled = false;
+            if (rig == null || rig.head == null) return;
+            var ray = new Ray(rig.head.position, rig.head.forward);
+            Vector3 local = Vector3.zero;
+            float distance = 0f;
+            float w = vrBarWidth;
+            bool hits = vrRoot.activeInHierarchy && MenuKit.RayToLocalPlane(ray, vrRoot.transform, out local, out distance) && distance < 2f;
+            bool onBar = hits && Mathf.Abs(local.x) <= w * 0.5f + 0.02f && Mathf.Abs(local.y) <= 0.04f;
+            bool menuOpen = rig.Menu != null && rig.Menu.IsOpen;   // then left click is the menu's
+            if (InputShim.MouseDown(0) && onBar && !menuOpen && CanChange) mouseDragging3d = true;
+            if (!InputShim.MouseHeld(0)) mouseDragging3d = false;
+            vrDragging = mouseDragging3d;
+            if (mouseDragging3d && hits) SetIndex(IndexAt((local.x + w * 0.5f) / w));
+            lastIndex = app.speedIndex;
+        }
+
         void UpdateVr()
         {
+            if (vrRoot != null && barOnLaptop)
+            {
+                UpdateBarByLooking();
+                return;
+            }
             if (vrRoot == null || rig == null || rig.rightHand == null || !rig.rightHand.gameObject.activeInHierarchy)
             {
                 HoldsRightGrip = false;

@@ -74,6 +74,15 @@ namespace Eosat1
         OrbitPathView path;
         GameObject vrScreen;
         Material vrScreenMaterial;
+        // the frame round the headset's camera picture, in the VR menu's style
+        TextMesh vrCaption;
+        Material vrFrameText;
+        Font vrFont;
+        readonly System.Collections.Generic.List<Material> vrFrameMaterials = new System.Collections.Generic.List<Material>();
+        const float ScreenHalf = 0.13f;                       // the picture: a 26 cm square
+        const float FrameTop = ScreenHalf + 0.032f, FrameBottom = -ScreenHalf - 0.03f, FrameHalfWidth = ScreenHalf + 0.01f;
+        /// <summary>Height of the whole framed screen (title band, picture, caption band), metres at scale 1.</summary>
+        public const float FrameHeight = FrameTop - FrameBottom;
         Mesh vrScreenMesh, markerMesh;
         bool ready;
         const int ButtonCount = 6;
@@ -120,6 +129,8 @@ namespace Eosat1
                 Destroy(target);
             }
             if (vrScreenMaterial != null) Destroy(vrScreenMaterial);
+            foreach (Material m in vrFrameMaterials) if (m != null) Destroy(m);
+            Font.textureRebuilt -= OnVrFontRebuilt;
             if (vrScreenMesh != null) Destroy(vrScreenMesh);
             if (markerMesh != null) Destroy(markerMesh);
             if (arrowMesh != null) Destroy(arrowMesh);
@@ -292,7 +303,85 @@ namespace Eosat1
             mr.receiveShadows = false;
             vrScreenMaterial = new Material(sh) { name = "EOSAT1 Screen (runtime)" };
             mr.sharedMaterial = vrScreenMaterial;
+            BuildVrFrame();
             vrScreen.SetActive(false);
+        }
+
+        /// <summary>
+        /// A frame round the headset's camera picture in the VR menu's style: a navy panel with a cyan
+        /// rounded border, the title above, a small crosshair on the picture, and the camera's numbers
+        /// below (field of view, km across, off nadir), as on the laptop's camera view.
+        /// </summary>
+        void BuildVrFrame()
+        {
+            Shader panel = Shader.Find("EOSAT1/UiPanel");
+            Shader textShader = Shader.Find("EOSAT1/HudText");
+            Shader unlit = Shader.Find("EOSAT1/UnlitColor");
+            Transform t = vrScreen.transform;
+            if (panel != null)
+            {
+                float h = FrameTop - FrameBottom;
+                MeshRenderer back = MenuKit.Panel("Frame", t, panel, new Vector3(0f, (FrameTop + FrameBottom) * 0.5f, 0.004f),
+                                                  new Vector2(FrameHalfWidth * 2f, h),
+                                                  new Color(0.03f, 0.065f, 0.115f, 0.96f), new Color(0.012f, 0.025f, 0.05f, 0.96f),
+                                                  HudStyle.WithAlpha(HudStyle.Accent, 0.85f), 0.004f, 0.02f, MenuKit.OrderPanel);
+                back.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                vrFrameMaterials.Add(back.sharedMaterial);
+            }
+            if (unlit != null)
+            {
+                // a small crosshair with a gap in the middle, so the very centre stays clear
+                var cross = new Material(unlit) { name = "EOSAT1 Camera Crosshair" };
+                cross.SetColor("_Color", HudStyle.Accent * 0.9f);
+                vrFrameMaterials.Add(cross);
+                const float arm = 0.012f, gap = 0.006f, bar = 0.0012f;
+                CrossBar(t, cross, new Vector3(-(gap + arm * 0.5f), 0f, -0.001f), new Vector2(arm, bar));
+                CrossBar(t, cross, new Vector3(gap + arm * 0.5f, 0f, -0.001f), new Vector2(arm, bar));
+                CrossBar(t, cross, new Vector3(0f, -(gap + arm * 0.5f), -0.001f), new Vector2(bar, arm));
+                CrossBar(t, cross, new Vector3(0f, gap + arm * 0.5f, -0.001f), new Vector2(bar, arm));
+            }
+            if (textShader != null)
+            {
+                vrFont = null;
+                try { vrFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); }
+                catch (System.Exception) { }
+                if (vrFont == null)
+                {
+                    try { vrFont = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
+                    catch (System.Exception) { }
+                }
+                if (vrFont == null) return;
+                vrFrameText = MenuKit.NewMaterial(textShader, "EOSAT1 Camera Frame Text");
+                vrFrameMaterials.Add(vrFrameText);
+                if (vrFont.material != null) vrFrameText.SetTexture("_MainTex", vrFont.material.mainTexture);
+                Font.textureRebuilt += OnVrFontRebuilt;
+                float titleY = ScreenHalf + 0.016f;
+                MenuKit.Text("Title", t, new Vector3(-ScreenHalf, titleY, -0.001f), MenuKit.Spaced("SATELLITE CAMERA"), 0.016f,
+                             HudStyle.Accent, TextAnchor.MiddleLeft, vrFont, vrFrameText);
+                MenuKit.Text("Camera Name", t, new Vector3(ScreenHalf, titleY, -0.001f), "DragonEye  \u00b7  C off  \u00b7  [ ] zoom", 0.011f,
+                             HudStyle.TextDim, TextAnchor.MiddleRight, vrFont, vrFrameText);
+                vrCaption = MenuKit.Text("Caption", t, new Vector3(0f, -ScreenHalf - 0.015f, -0.001f), "", 0.011f,
+                                         HudStyle.TextBright, TextAnchor.MiddleCenter, vrFont, vrFrameText);
+            }
+        }
+
+        static void CrossBar(Transform parent, Material m, Vector3 pos, Vector2 size)
+        {
+            GameObject q = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            q.name = "Crosshair";
+            Destroy(q.GetComponent<Collider>());
+            q.transform.SetParent(parent, false);
+            q.transform.localPosition = pos;
+            q.transform.localScale = new Vector3(size.x, size.y, 1f);
+            Renderer r = q.GetComponent<Renderer>();
+            r.sharedMaterial = m;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+        }
+
+        void OnVrFontRebuilt(Font f)
+        {
+            if (f == vrFont && vrFrameText != null && f.material != null) vrFrameText.SetTexture("_MainTex", f.material.mainTexture);
         }
 
         /// <summary>
@@ -320,7 +409,8 @@ namespace Eosat1
                 // on the drawn laptop's screen, as tall as its display (the picture is square)
                 vrScreen.transform.localPosition = Vector3.zero;
                 vrScreen.transform.localRotation = Quaternion.identity;
-                vrScreen.transform.localScale = Vector3.one * (LaptopMarker.DisplaySize.y / 0.26f);
+                vrScreen.transform.localScale = Vector3.one * (LaptopMarker.DisplaySize.y / FrameHeight);
+                vrScreen.transform.localPosition = new Vector3(0f, -(FrameTop + FrameBottom) * 0.5f * vrScreen.transform.localScale.y, 0f);
             }
             else
             {
@@ -328,7 +418,7 @@ namespace Eosat1
                 vrScreen.transform.localPosition = new Vector3(0.2f, -0.14f, 0.6f);
                 vrScreen.transform.localRotation = Quaternion.Euler(12f, 18f, 0f);
             }
-            vrScreen.layer = HiddenFromSatCameraLayer;   // never in the satellite camera's own picture
+            SetLayer(vrScreen);   // never in the satellite camera's own picture (frame and all)
         }
 
         void HideOverlaysFromSatCamera()
@@ -492,7 +582,8 @@ namespace Eosat1
             if (headset) { w = 1024; h = 1024; }
             else if (display == SatCameraDisplay.Full) { w = Mathf.Max(16, Screen.width); h = Mathf.Max(16, Screen.height); }
             else { w = h = InsetSize(); }
-            if (target == null || target.width != w || target.height != h)
+            int aa = headset ? 1 : 2;   // headset: drawn at 1024 and shown smaller, smoothed by its mipmaps
+            if (target == null || target.width != w || target.height != h || target.antiAliasing != aa || target.useMipMap != headset)
             {
                 satCamera.targetTexture = null;
                 if (target != null)
@@ -500,7 +591,15 @@ namespace Eosat1
                     target.Release();
                     Destroy(target);
                 }
-                target = new RenderTexture(w, h, 24) { name = "EOSAT1 Satellite Camera" };
+                target = new RenderTexture(w, h, 24) { name = "EOSAT1 Satellite Camera", antiAliasing = aa };
+                if (headset)
+                {
+                    // shown much smaller than it is drawn: mipmaps keep it from shimmering
+                    target.useMipMap = true;
+                    target.autoGenerateMips = true;
+                    target.filterMode = FilterMode.Trilinear;
+                    target.anisoLevel = 4;
+                }
                 target.Create();
             }
             if (satCamera.targetTexture != target) satCamera.targetTexture = target;
@@ -542,6 +641,14 @@ namespace Eosat1
             cameraLabel = text;
             cameraLabelShort = "<b><color=" + HudStyle.AccentHex + ">DRAGONEYE</color></b>   " + fieldOfViewDeg.ToString("0.0", Inv) + " deg"
                                + (offNadir < 60.0 ? "   " + across.ToString("0", Inv) + " km across" : "");
+            if (vrCaption != null)
+            {
+                string c = fieldOfViewDeg.ToString("0.0", Inv) + "\u00b0 wide"
+                         + (offNadir < 60.0 ? "   \u00b7   " + across.ToString("0", Inv) + " km across" : "")
+                         + "   \u00b7   " + offNadir.ToString("0.0", Inv) + "\u00b0 off nadir"
+                         + (space.Illumination < 0.5 ? "   <color=" + HudStyle.WarnHex + ">ECLIPSE</color>" : "");
+                if (vrCaption.text != c) vrCaption.text = c;
+            }
         }
 
         // ------------------------------------------------------------------ on screen (desktop)
