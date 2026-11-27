@@ -101,7 +101,7 @@ namespace Eosat1
         void LateUpdate()
         {
             // camera (the headset owns the camera when one is active)
-            if (!UnityEngine.XR.XRSettings.isDeviceActive && cameraTransform != null && target != null)
+            if (!VrPreview.Headset && cameraTransform != null && target != null)
             {
                 bool blocked = HudStyle.PointerBlocked;
                 float scroll = WheelBusy || blocked ? 0f : InputShim.Scroll();
@@ -143,7 +143,7 @@ namespace Eosat1
             }
 
             // with someone in the headset, V and F take them to the same viewpoints
-            if (UnityEngine.XR.XRSettings.isDeviceActive && rig != null && !HudStyle.ModalActive)
+            if (VrPreview.Headset && rig != null && !HudStyle.ModalActive)
             {
                 if (InputShim.Down(KeyCode.V)) rig.NextViewpoint();
                 if (InputShim.Down(KeyCode.F)) rig.FirstViewpoint();

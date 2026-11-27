@@ -98,7 +98,7 @@ namespace Eosat1
         void Update()
         {
             if (app == null) return;
-            bool headset = XRSettings.isDeviceActive;
+            bool headset = VrPreview.Headset;
             if (headset) PlaceVrBar();
             if (headset) UpdateVr();
             UpdateDesktop();   // the laptop's bar works with or without a headset in use
@@ -294,7 +294,7 @@ namespace Eosat1
             if (vrRoot == null) return;
             Transform t = vrRoot.transform;
             Transform screen, side = null;
-            bool want = !MenuSettings.UseControllers && LaptopMarker.Current != null && LaptopMarker.Current.TryGetAnchors(out screen, out side);
+            bool want = !VrPreview.ControllersInUse && LaptopMarker.Current != null && LaptopMarker.Current.TryGetAnchors(out screen, out side);
             if (want)
             {
                 if (t.parent != side)

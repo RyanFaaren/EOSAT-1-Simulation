@@ -135,19 +135,23 @@ namespace Eosat1
 
         void Update()
         {
-            bool active = XRSettings.isDeviceActive;
+            bool active = VrPreview.Headset;   // a headset, or its view previewed on the laptop (VrPreview, F9)
+            bool real = XRSettings.isDeviceActive;
             if (!active) LockMouseToHead(false);
             // Settings > Headset controllers off: the headset only looks around; no gloves, no buttons
-            bool controllers = MenuSettings.UseControllers;
-            SetActive(leftHand, active && controllers);
-            SetActive(rightHand, active && controllers);
+            bool controllers = VrPreview.ControllersInUse;
+            SetActive(leftHand, real && controllers);
+            SetActive(rightHand, real && controllers);
             if (!active)
             {
                 floorConfirmed = false;
                 return;
             }
-            EnsureFloorOrigin();
-            UpdatePoses();
+            if (real)
+            {
+                EnsureFloorOrigin();
+                UpdatePoses();
+            }
             if (!poseKnown)
             {
                 // find out which kind of pose the controllers report (the gloves need to know)

@@ -415,7 +415,7 @@ namespace Eosat1
                 return;
             }
             fullPlaced = false;
-            bool onHand = MenuSettings.UseControllers && rig.rightHand != null;
+            bool onHand = VrPreview.ControllersInUse && rig.rightHand != null;
             Transform laptopScreen = null, side;
             bool onLaptop = !onHand && LaptopMarker.Current != null && LaptopMarker.Current.TryGetAnchors(out laptopScreen, out side);
             Transform want = onHand ? rig.rightHand : onLaptop ? laptopScreen : rig.head;
@@ -485,7 +485,7 @@ namespace Eosat1
         public void CycleSatCamera()
         {
             if (!ready) return;
-            bool headset = UnityEngine.XR.XRSettings.isDeviceActive;
+            bool headset = VrPreview.Headset;
             display = (SatCameraDisplay)(((int)display + 1) % 3);   // off -> small screen -> full view -> off
             fullPlaced = false;
             // the camera picture needs the life-size scene around the spacecraft
@@ -494,7 +494,7 @@ namespace Eosat1
             if (display == SatCameraDisplay.Off) app.Say("Satellite camera view off");
             else if (headset && vrScreen == null) app.Say("Satellite camera: no screen could be made (shader EOSAT1/Screen missing)");
             else if (headset && display == SatCameraDisplay.Full) app.Say("Satellite camera: full view in front of you ([ ] to zoom, C to close)");
-            else app.Say(headset ? (MenuSettings.UseControllers ? "Satellite camera: on the screen above your right hand (C again for the full view)"
+            else app.Say(headset ? (VrPreview.ControllersInUse ? "Satellite camera: on the screen above your right hand (C again for the full view)"
                                                                 : "Satellite camera: on the laptop's screen (C again for the full view)")
                                  : (display == SatCameraDisplay.Inset ? "Satellite camera: corner picture (C again for full screen)"
                                                                        : "Satellite camera: full screen (wheel or [ ] to zoom)"));
@@ -553,7 +553,7 @@ namespace Eosat1
         void Update()
         {
             if (!ready) return;
-            bool headset = UnityEngine.XR.XRSettings.isDeviceActive;
+            bool headset = VrPreview.Headset;
 
             bool keys = !HudStyle.ModalActive;   // the help card is open: keys wait
             if (keys && InputShim.Down(KeyCode.Z)) ToggleOverview();
@@ -718,7 +718,8 @@ namespace Eosat1
             Vector2 mouse = HudStyle.Mouse();
 
             // the satellite camera's picture
-            if (display != SatCameraDisplay.Off && target != null && satCamera != null && satCamera.enabled)
+            // (not while previewing the headset's view: the camera picture is on the drawn laptop then)
+            if (display != SatCameraDisplay.Off && target != null && satCamera != null && satCamera.enabled && !VrPreview.Active)
             {
                 Rect r;
                 bool full = display == SatCameraDisplay.Full;

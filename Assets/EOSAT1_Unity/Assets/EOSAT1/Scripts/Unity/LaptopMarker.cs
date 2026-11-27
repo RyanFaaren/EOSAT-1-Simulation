@@ -566,8 +566,13 @@ namespace Eosat1
         // ------------------------------------------------------------------ every frame
         void Update()
         {
-            bool headset = XRSettings.isDeviceActive;
-            if (headset && InputShim.Ctrl && InputShim.Down(KeyCode.J))
+            bool headset = VrPreview.Headset;
+            bool preview = VrPreview.Active;
+            if (preview)
+            {
+                if (testing) StopTest(null);
+            }
+            else if (headset && InputShim.Ctrl && InputShim.Down(KeyCode.J))
             {
                 if (testing) StopTest("Keyboard test stopped");
                 else if (hasPose && PlayerPrefs.GetInt(KeyHidden, 0) == 0) StartTest();
@@ -592,9 +597,9 @@ namespace Eosat1
                 else Say("No laptop set yet: lay a controller against each side of it and press J");
             }
 
-            if (headset && hasPose && !testing && !HudStyle.ModalActive) Nudge();
+            if (headset && hasPose && !testing && !preview && !HudStyle.ModalActive) Nudge();
 
-            bool show = headset && hasPose && PlayerPrefs.GetInt(KeyHidden, 0) == 0 && Room != null;
+            bool show = headset && (hasPose || preview) && PlayerPrefs.GetInt(KeyHidden, 0) == 0 && Room != null;
             if (show && marker == null) Build();
             if (marker == null) return;
             if (marker.gameObject.activeSelf != show) marker.gameObject.SetActive(show);
@@ -602,8 +607,17 @@ namespace Eosat1
             if (marker.parent != Room) marker.SetParent(Room, false);
             if (testing) ClearGlow();
             else GlowPressedKeys();
-            marker.localPosition = posePosition;
-            marker.localRotation = Quaternion.Euler(0f, poseYaw, 0f);
+            if (preview && VrPreview.Current != null)
+            {
+                // previewing on the laptop: where a seated person's keyboard would be, straight ahead
+                marker.localPosition = VrPreview.Current.EyeLocal + new Vector3(0f, -keyboardBelow, keyboardAhead);
+                marker.localRotation = Quaternion.identity;
+            }
+            else
+            {
+                marker.localPosition = posePosition;
+                marker.localRotation = Quaternion.Euler(0f, poseYaw, 0f);
+            }
             // a slow, gentle pulse on the outline so it reads as a guide, not part of the space scene
             Color c = color * (0.75f + 0.25f * Mathf.Sin(Time.unscaledTime * 2f));
             c.a = 1f;

@@ -130,7 +130,7 @@ namespace Eosat1
 
         void Update()
         {
-            bool headset = UnityEngine.XR.XRSettings.isDeviceActive;
+            bool headset = VrPreview.Headset;
             // controllers off (K): the panel stands beside the laptop drawn in the headset, as there's no hand to hold it
             bool beside = headset && PlaceBesideLaptop();
             // in the headset the panel on the left controller comes up by itself when the link is weak
@@ -166,7 +166,7 @@ namespace Eosat1
                 homeKnown = true;
             }
             Transform screen, side = null;
-            bool beside = !MenuSettings.UseControllers && LaptopMarker.Current != null && LaptopMarker.Current.TryGetAnchors(out screen, out side);
+            bool beside = !VrPreview.ControllersInUse && LaptopMarker.Current != null && LaptopMarker.Current.TryGetAnchors(out screen, out side);
             Transform want = beside ? side : homeParent;
             if (t.parent != want)
             {

@@ -515,7 +515,7 @@ namespace Eosat1
         void Update()
         {
             if (!built) return;
-            if (!XRSettings.isDeviceActive)
+            if (!VrPreview.Headset)
             {
                 if (open) Close();
                 if (strip.gameObject.activeSelf) strip.gameObject.SetActive(false);
@@ -551,7 +551,7 @@ namespace Eosat1
         }
 
         /// <summary>Controllers switched off (Settings, or K): you point with your head.</summary>
-        static bool LookToPoint { get { return !MenuSettings.UseControllers; } }
+        static bool LookToPoint { get { return !VrPreview.ControllersInUse; } }
 
         bool PointerRay(out Ray ray)
         {
