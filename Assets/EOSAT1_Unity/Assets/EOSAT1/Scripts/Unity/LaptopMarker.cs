@@ -1,8 +1,9 @@
 // EOSAT-1 VR - shows where the real laptop (and its keyboard) is while you wear the headset.
 //
 // Set it once: sit at the laptop with the headset on, hands on the keyboard, look at the
-// laptop's screen, and press J. For a closer fit, first lay a controller flat in the middle of
-// the keyboard (on G / H): J then uses the controller's position. A glowing outline of a laptop is then
+// laptop's screen, and press J. For an exact fit, lay the controllers flat on the keyboard first:
+// the left one on the left Shift key and the right one on the right Shift key (or one controller
+// on each in turn, pressing J each time). A glowing outline of a laptop is then
 // drawn where the real one is, with a "LAPTOP" label, in the headset only. On it lies a drawn
 // keyboard, every key labelled, with the keys the simulation uses lit up in cyan. It stays put in the
 // real room however you fly, turn or jump between viewpoints, because it hangs on the
@@ -120,7 +121,24 @@ namespace Eosat1
             get { return rig == null ? null : (rig.cameraOffset != null ? rig.cameraOffset : rig.transform); }
         }
 
-        /// <summary>Put the laptop where it is now: in front of and below the eyes of someone sitting at it.</summary>
+        // two-point set-up: the first press with one controller on the desk waits here for the second
+        bool waitingForRight;
+        Vector3 leftEnd;
+        float leftEndTime;
+
+        // where a controller's tracked point is when it lies flat on a key, above the key's face
+        const float ControllerHeight = 0.025f;
+        // the two Shift keys of the drawn layout: their centres, in keys from the middle, and their row
+        const float LeftShiftX = -6.375f, RightShiftX = 6.125f, ShiftRowZ = -1f;
+
+        /// <summary>
+        /// Set where the laptop is (J). Best: both controllers lying on the keyboard, the left one on
+        /// the left Shift key and the right one on the right Shift key: one press pins down the exact
+        /// spot and angle. With one controller: on the left Shift, press J; move it to the right Shift,
+        /// press J again (or press J again without moving it, with it lying in the middle of the
+        /// keyboard on G / H, to use just that spot). No controller on the desk: a guess from where
+        /// your head is and which way it faces.
+        /// </summary>
         void SetHere()
         {
             Transform room = Room;
@@ -130,37 +148,95 @@ namespace Eosat1
             fwd.y = 0f;
             if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
             fwd.Normalize();
-            posePosition = eyes + fwd * keyboardAhead + Vector3.down * keyboardBelow;
-            poseYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
-            // a controller laid on the keyboard, near where we'd guess it, pins it down exactly
-            bool fromController = false;
-            Vector3 best = Vector3.zero;
-            float bestDistance = 0.6f;
-            foreach (XRNode node in new[] { XRNode.RightHand, XRNode.LeftHand })
+            Vector3 guess = eyes + fwd * keyboardAhead + Vector3.down * keyboardBelow;
+
+            // controllers lying on the desk near where the keyboard should be
+            var onDesk = new System.Collections.Generic.List<Vector3>();
+            foreach (XRNode node in new[] { XRNode.LeftHand, XRNode.RightHand })
             {
                 InputDevice dev = InputDevices.GetDeviceAtXRNode(node);
                 Vector3 cp;
                 bool tracked;
                 if (!dev.isValid || !dev.TryGetFeatureValue(CommonUsages.devicePosition, out cp)) continue;
                 if (dev.TryGetFeatureValue(CommonUsages.isTracked, out tracked) && !tracked) continue;
-                if (cp.y > eyes.y - 0.2f) continue;   // in a hand near the face, not on the desk
-                float dist = Vector3.Distance(cp, posePosition);
-                if (dist < bestDistance)
-                {
-                    bestDistance = dist;
-                    best = cp;
-                    fromController = true;
-                }
+                if (cp.y > eyes.y - 0.2f) continue;                    // in a hand near the face, not on the desk
+                if (Vector3.Distance(cp, guess) > 0.6f) continue;      // somewhere else in the room
+                onDesk.Add(cp);
             }
-            if (fromController) posePosition = best + Vector3.down * 0.025f;   // a controller lying flat is ~5 cm thick
+
+            if (onDesk.Count == 2 && Flat(onDesk[1] - onDesk[0]).magnitude > 0.12f)
+            {
+                // the two Shift keys at once: the one further left (as you sit) is the left Shift
+                Vector3 l = onDesk[0], r = onDesk[1];
+                if (Vector3.Dot(r - l, Vector3.Cross(Vector3.up, fwd)) < 0f) { Vector3 tmp = l; l = r; r = tmp; }
+                FitTwoPoints(l, r);
+                waitingForRight = false;
+                Save("Laptop set from both controllers on the Shift keys: the drawn keyboard sits on the real one");
+                return;
+            }
+            if (onDesk.Count >= 1)
+            {
+                Vector3 c = onDesk[0];
+                if (onDesk.Count == 2 && Vector3.Distance(onDesk[1], guess) < Vector3.Distance(c, guess)) c = onDesk[1];
+                if (waitingForRight && Time.unscaledTime - leftEndTime < 90f)
+                {
+                    waitingForRight = false;
+                    if (Flat(c - leftEnd).magnitude > 0.12f)
+                    {
+                        FitTwoPoints(leftEnd, c);
+                        Save("Laptop set from the two Shift keys: the drawn keyboard sits on the real one");
+                    }
+                    else
+                    {
+                        // pressed again without moving it: the controller is on the middle of the keyboard
+                        posePosition = c + Vector3.down * ControllerHeight;
+                        poseYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
+                        Save("Laptop set from the controller in the middle of the keyboard (the angle is from your head: for an exact fit use the two Shift keys)");
+                    }
+                    return;
+                }
+                waitingForRight = true;
+                leftEnd = c;
+                leftEndTime = Time.unscaledTime;
+                Say("Left end noted. Now lay the controller on the RIGHT Shift key and press J. (Press J again without moving it if it is in the middle of the keyboard.)");
+                return;
+            }
+
+            // no controller on the desk: a guess from the head
+            waitingForRight = false;
+            posePosition = guess;
+            poseYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
+            Save("Laptop marked from where you sit (a guess). For an exact fit, lay a controller on the left Shift key and press J");
+        }
+
+        static Vector3 Flat(Vector3 v)
+        {
+            v.y = 0f;
+            return v;
+        }
+
+        /// <summary>Place the keyboard from the controllers' points on its left and right Shift keys.</summary>
+        void FitTwoPoints(Vector3 left, Vector3 right)
+        {
+            Vector3 across = Flat(right - left).normalized;
+            Vector3 ahead = Vector3.Cross(across, Vector3.up);   // away from you, along the desk
+            Vector3 mid = (left + right) * 0.5f;
+            // the middle of the two Shift keys is not quite the middle of the keyboard: move along the
+            // row to the middle, and back one row to the home row (G / H), the marker's origin
+            float alongRow = -(LeftShiftX + RightShiftX) * 0.5f * KeyPitch;
+            posePosition = mid + across * alongRow - ahead * (ShiftRowZ * KeyPitch) + Vector3.down * ControllerHeight;
+            poseYaw = Mathf.Atan2(ahead.x, ahead.z) * Mathf.Rad2Deg;
+        }
+
+        void Save(string message)
+        {
             hasPose = true;
             var inv = System.Globalization.CultureInfo.InvariantCulture;
-            PlayerPrefs.SetString(KeyPose, posePosition.x.ToString("0.###", inv) + " " + posePosition.y.ToString("0.###", inv) + " " +
-                                           posePosition.z.ToString("0.###", inv) + " " + poseYaw.ToString("0.#", inv));
+            PlayerPrefs.SetString(KeyPose, posePosition.x.ToString("0.####", inv) + " " + posePosition.y.ToString("0.####", inv) + " " +
+                                           posePosition.z.ToString("0.####", inv) + " " + poseYaw.ToString("0.##", inv));
             PlayerPrefs.SetInt(KeyHidden, 0);
             PlayerPrefs.Save();
-            Say(fromController ? "Laptop marked from the controller on the keyboard (Shift + J hides it)"
-                               : "Laptop marked: its outline shows where the keyboard is (for a closer fit, lay a controller on the middle of the keyboard and press J again)");
+            Say(message);
         }
 
         void Say(string message)
