@@ -336,6 +336,7 @@ namespace Eosat1
             // ---------------------------------------------------------------- atmosphere and cameras
             if (earth != null)
             {
+                TuneAtmosphereForHeadset();
                 Shader.SetGlobalVector(EarthCenterId, earth.position);
                 Shader.SetGlobalFloat(EarthRadiusId, (float)(R * km * transform.lossyScale.x));
                 Shader.SetGlobalFloat(AtmoScaleId, (float)(22.0 * km * transform.lossyScale.x));
@@ -347,6 +348,43 @@ namespace Eosat1
             {
                 if (cameras[i] != null && Mathf.Abs(cameras[i].farClipPlane - far) > 1f) cameras[i].farClipPlane = far;
             }
+        }
+
+        [Header("Atmosphere in the headset")]
+        [Tooltip("The headset (Quest 2 over Link) shows the limb glow's blue, mixed with its sunset orange, as purple. In the headset only, the blue is pulled towards cyan and the orange toned down.")]
+        public bool headsetAtmosphereFix = true;
+        public Color headsetScatterColour = new Color(0.16f, 0.62f, 1f, 1f);
+        [Range(0f, 1f)] public float headsetSunsetAmount = 0.5f;
+        Renderer atmosphere;
+        bool atmosphereLooked, atmosphereTuned;
+        MaterialPropertyBlock atmosphereBlock;
+        static readonly int ColorId = Shader.PropertyToID("_Color");
+        static readonly int SunsetId = Shader.PropertyToID("_Sunset");
+
+        /// <summary>Headset only: the limb glow's colours, adjusted so it reads blue, not purple.</summary>
+        void TuneAtmosphereForHeadset()
+        {
+            if (!atmosphereLooked)
+            {
+                atmosphereLooked = true;
+                Transform a = earth.Find("Atmosphere");
+                if (a != null) atmosphere = a.GetComponent<Renderer>();
+            }
+            if (atmosphere == null) return;
+            bool want = headsetAtmosphereFix && UnityEngine.XR.XRSettings.isDeviceActive;
+            if (want == atmosphereTuned) return;
+            atmosphereTuned = want;
+            if (!want)
+            {
+                atmosphere.SetPropertyBlock(null);   // back to the material's own colours
+                return;
+            }
+            if (atmosphereBlock == null) atmosphereBlock = new MaterialPropertyBlock();
+            Material m = atmosphere.sharedMaterial;
+            Color sunset = m != null && m.HasProperty(SunsetId) ? m.GetColor(SunsetId) : new Color(1f, 0.52f, 0.25f, 1f);
+            atmosphereBlock.SetColor(ColorId, headsetScatterColour);
+            atmosphereBlock.SetColor(SunsetId, sunset * headsetSunsetAmount);
+            atmosphere.SetPropertyBlock(atmosphereBlock);
         }
 
         Camera MainCamera()
