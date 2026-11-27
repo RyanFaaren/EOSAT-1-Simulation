@@ -13,6 +13,10 @@
 //     Ctrl + Shift + up/down   raise / lower it
 //     Ctrl + [ ]               turn it
 //   Hold for longer moves; it is saved when you let go.
+//   Ctrl + J   the keyboard test: a drawn key flashes, you press the real key under that spot,
+//              five times (G, Q, P, Z, M). Keys you hit instead show which way the drawing is
+//              off; at the end it says how many matched and moves the drawing to correct it.
+//              Ctrl + J again stops it. While it runs, the keys do nothing else.
 //
 // With the headset controllers switched off (K), the headset's screens appear on this laptop
 // instead of on your hands: the satellite camera on its screen, the VR menu (right-click) over
@@ -93,6 +97,57 @@ namespace Eosat1
         const float NudgeTurnSpeed = 4f;     // degrees per second
         const float NudgeStep = 0.002f;      // the first, single step of a press: 2 mm
         const float NudgeTurnStep = 0.25f;   // and a quarter of a degree
+
+        // the keyboard test (Ctrl + J)
+        static readonly string[] TestKeys = { "G", "Q", "P", "Z", "M" };   // the middle, then the four corners of the letters
+        bool testing;
+        int testIndex;
+        readonly List<Vector2> testTargets = new List<Vector2>();   // where each target key is (x along the rows, z away)
+        readonly List<Vector2> testErrors = new List<Vector2>();    // pressed key minus target key, metres
+        readonly Dictionary<string, Renderer> keyQuads = new Dictionary<string, Renderer>();
+        Material flashMat;
+        TextMesh testText;
+        Renderer flashing;
+        Material flashingWas;
+
+        // the keys the test can recognise, with their labels on the drawn keyboard
+        static readonly KeyValuePair<KeyCode, string>[] Recognised = BuildRecognised();
+
+        static KeyValuePair<KeyCode, string>[] BuildRecognised()
+        {
+            var list = new List<KeyValuePair<KeyCode, string>>();
+            for (KeyCode k = KeyCode.A; k <= KeyCode.Z; k++) list.Add(new KeyValuePair<KeyCode, string>(k, ((char)('A' + (k - KeyCode.A))).ToString()));
+            for (int d = 0; d <= 9; d++) list.Add(new KeyValuePair<KeyCode, string>(KeyCode.Alpha0 + d, d.ToString()));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.Space, "Space"));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.Tab, "Tab"));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.Backspace, "Bksp"));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.Return, "Enter"));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.Minus, "-"));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.Equals, "="));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.Comma, ","));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.Period, "."));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.LeftBracket, "["));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.RightBracket, "]"));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.Home, "Home"));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.LeftArrow, "\u2190"));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.RightArrow, "\u2192"));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.UpArrow, "\u2191"));
+            list.Add(new KeyValuePair<KeyCode, string>(KeyCode.DownArrow, "\u2193"));
+            return list.ToArray();
+        }
+
+        /// <summary>The main-key cap with this label (not the number pad's), if the layout has one.</summary>
+        static bool FindCap(string label, out KeyCap cap)
+        {
+            foreach (KeyCap k in Layout())
+                if (k.Label == label && !k.Pad)
+                {
+                    cap = k;
+                    return true;
+                }
+            cap = default(KeyCap);
+            return false;
+        }
 
         // one controller: the first press waits here for the second
         bool waitingForRight;
@@ -245,6 +300,146 @@ namespace Eosat1
             }
         }
 
+        // ------------------------------------------------------------------ the keyboard test
+        void StartTest()
+        {
+            if (marker == null) Build();
+            if (marker == null) return;
+            testing = true;
+            testIndex = 0;
+            testTargets.Clear();
+            testErrors.Clear();
+            HudStyle.MarkModal();   // from now on the keys only answer the test
+            ShowTarget();
+            Say("Keyboard test: press the real key under the flashing drawn key (Ctrl + J stops)");
+        }
+
+        void StopTest(string message)
+        {
+            testing = false;
+            Unflash();
+            if (testText != null) testText.gameObject.SetActive(false);
+            if (message != null) Say(message);
+        }
+
+        void ShowTarget()
+        {
+            Unflash();
+            string key = TestKeys[testIndex];
+            Renderer r;
+            if (keyQuads.TryGetValue(key, out r) && r != null)
+            {
+                flashing = r;
+                flashingWas = r.sharedMaterial;
+            }
+            if (testText != null)
+            {
+                testText.text = "KEYBOARD TEST  " + (testIndex + 1) + " / " + TestKeys.Length +
+                                "\nput a finger on the flashing key and press it     (Ctrl + J stops)";
+                testText.gameObject.SetActive(true);
+            }
+        }
+
+        void Unflash()
+        {
+            if (flashing != null && flashingWas != null) flashing.sharedMaterial = flashingWas;
+            flashing = null;
+            flashingWas = null;
+        }
+
+        void UpdateTest()
+        {
+            HudStyle.MarkModal();   // every frame: the simulation's own keys wait
+            if (flashing != null && flashMat != null)
+                flashing.sharedMaterial = (Mathf.Repeat(Time.unscaledTime, 0.5f) < 0.3f) ? flashMat : flashingWas;
+
+            string pressed = null;
+            foreach (KeyValuePair<KeyCode, string> k in Recognised)
+                if (InputShim.Down(k.Key))
+                {
+                    pressed = k.Value;
+                    break;
+                }
+            if (pressed == null) return;
+
+            KeyCap target, hit;
+            if (!FindCap(TestKeys[testIndex], out target)) return;
+            if (!FindCap(pressed, out hit))
+            {
+                Say("That key isn't on the drawn keyboard: try the flashing key again");
+                return;
+            }
+            var error = new Vector2(hit.X - target.X, hit.Z - target.Z);
+            if (error.magnitude > 4.5f * Pitch)
+            {
+                Say("That was " + pressed + ", far from the flashing key. Try again: rest a finger on the flashing key first");
+                return;
+            }
+            testTargets.Add(new Vector2(target.X, target.Z));
+            testErrors.Add(error);
+            testIndex++;
+            if (testIndex < TestKeys.Length)
+            {
+                Say(pressed == TestKeys[testIndex - 1] ? "Right key" : "You pressed " + pressed + " (wanted " + TestKeys[testIndex - 1] + ")");
+                ShowTarget();
+                return;
+            }
+            FinishTest();
+        }
+
+        /// <summary>
+        /// Every miss says where the real keyboard is under the drawn one: at the drawn target the
+        /// real key was 'pressed', so the real keyboard sits at minus the error. Move the drawing by
+        /// the average of that, and turn it by how the front/back errors change from left to right.
+        /// </summary>
+        void FinishTest()
+        {
+            testing = false;
+            Unflash();
+            if (testText != null) testText.gameObject.SetActive(false);
+            int n = testErrors.Count, matched = 0;
+            float ex = 0f, ez = 0f, mx = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                if (testErrors[i].magnitude < 0.5f * Pitch) matched++;
+                ex += testErrors[i].x;
+                ez += testErrors[i].y;
+                mx += testTargets[i].x;
+            }
+            if (n == 0) return;
+            ex /= n;
+            ez /= n;
+            mx /= n;
+            if (matched == n)
+            {
+                Say("Keyboard test: " + matched + " of " + n + " keys matched. It's lined up");
+                return;
+            }
+            // the turn: fit the front/back error against where the key is along the rows
+            float sxx = 0f, sxz = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                float dx = testTargets[i].x - mx;
+                sxx += dx * dx;
+                sxz += dx * (testErrors[i].y - ez);
+            }
+            float turnDeg = 0f;
+            if (sxx > 1e-4f)
+            {
+                float slope = -sxz / sxx;   // how the real keyboard's rows run, in the drawing's frame
+                turnDeg = -Mathf.Atan(slope) * Mathf.Rad2Deg;
+                if (Mathf.Abs(turnDeg) < 0.5f) turnDeg = 0f;
+            }
+            Quaternion yaw = Quaternion.Euler(0f, poseYaw, 0f);
+            posePosition += yaw * new Vector3(-ex, 0f, -ez);
+            poseYaw = Mathf.Repeat(poseYaw + turnDeg + 180f, 360f) - 180f;
+            string move = "";
+            if (Mathf.Abs(ex) > 0.001f) move += Mathf.Abs(ex * 1000f).ToString("0") + " mm " + (ex > 0f ? "left" : "right");
+            if (Mathf.Abs(ez) > 0.001f) move += (move.Length > 0 ? ", " : "") + Mathf.Abs(ez * 1000f).ToString("0") + " mm " + (ez > 0f ? "towards you" : "away");
+            if (turnDeg != 0f) move += (move.Length > 0 ? ", " : "") + "turned " + Mathf.Abs(turnDeg).ToString("0.0") + " degrees";
+            Save("Keyboard test: " + matched + " of " + n + " keys matched. Moved the drawing " + move + ". Ctrl + J tests it again");
+        }
+
         /// <summary>+1 / -1 keys: a single step on the press, then steady movement while held.</summary>
         static float Axis(KeyCode plus, KeyCode minus, float step, float held)
         {
@@ -298,7 +493,18 @@ namespace Eosat1
         void Update()
         {
             bool headset = XRSettings.isDeviceActive;
-            if (headset && !HudStyle.ModalActive && InputShim.Down(KeyCode.J))
+            if (headset && InputShim.Ctrl && InputShim.Down(KeyCode.J))
+            {
+                if (testing) StopTest("Keyboard test stopped");
+                else if (hasPose && PlayerPrefs.GetInt(KeyHidden, 0) == 0) StartTest();
+                else Say("Set the laptop first (J), then Ctrl + J tests it");
+            }
+            else if (testing)
+            {
+                if (!headset) StopTest(null);
+                else UpdateTest();
+            }
+            else if (headset && !HudStyle.ModalActive && InputShim.Down(KeyCode.J))
             {
                 bool shift = InputShim.Held(KeyCode.LeftShift) || InputShim.Held(KeyCode.RightShift);
                 if (!shift) SetHere();
@@ -312,7 +518,7 @@ namespace Eosat1
                 else Say("No laptop set yet: lay a controller against each side of it and press J");
             }
 
-            if (headset && hasPose && !HudStyle.ModalActive) Nudge();
+            if (headset && hasPose && !testing && !HudStyle.ModalActive) Nudge();
 
             bool show = headset && hasPose && PlayerPrefs.GetInt(KeyHidden, 0) == 0 && Room != null;
             if (show && marker == null) Build();
@@ -455,6 +661,24 @@ namespace Eosat1
             kb.SetParent(marker, false);
             foreach (KeyCap k in Layout()) Key(kb, f, k);
 
+            flashMat = new Material(sh) { name = "EOSAT1 Laptop Key (test)" };
+            SetColor(flashMat, new Color(1f, 0.72f, 0.2f, 1f));
+            var tt = new GameObject("Keyboard Test Text");
+            tt.transform.SetParent(marker, false);
+            tt.transform.localPosition = new Vector3(0f, 0.035f, keysBack + 0.012f);   // upright, just behind the top row
+            testText = tt.AddComponent<TextMesh>();
+            if (f != null)
+            {
+                testText.font = f;
+                tt.GetComponent<MeshRenderer>().sharedMaterial = f.material;
+            }
+            testText.fontSize = 48;
+            testText.characterSize = 0.0024f;
+            testText.anchor = TextAnchor.LowerCenter;
+            testText.alignment = TextAlignment.Center;
+            testText.color = new Color(1f, 0.8f, 0.35f, 1f);
+            tt.SetActive(false);
+
             // the screen: hinged at the back edge, leaning back 15 degrees
             var screen = new GameObject("Screen").transform;
             screen.SetParent(marker, false);
@@ -492,6 +716,7 @@ namespace Eosat1
             r.sharedMaterial = keyMats[k.Used ? 0 : 1];
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             r.receiveShadows = false;
+            if (!k.Pad && !keyQuads.ContainsKey(k.Label)) keyQuads[k.Label] = r;
 
             var g = new GameObject("Label");
             g.transform.SetParent(parent, false);
@@ -545,6 +770,7 @@ namespace Eosat1
         {
             if (mat != null) Destroy(mat);
             if (keyMats != null) foreach (Material m in keyMats) if (m != null) Destroy(m);
+            if (flashMat != null) Destroy(flashMat);
         }
     }
 }
