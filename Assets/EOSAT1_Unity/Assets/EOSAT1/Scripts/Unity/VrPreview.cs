@@ -8,8 +8,9 @@
 // mouse to look around. Everything behaves as in the headset with its controllers switched off:
 // the drawn Legion keyboard in front of you (keys glow as you type), C for the satellite camera
 // on the drawn laptop's screen (twice for the full view), right-click for the VR menu (look and
-// left-click), the status panel and the speed bar beside the laptop. The laptop's own control bar
-// and status panel stay on top, as with a headset: Tab and H hide them for a clean picture.
+// left-click), the status panel and the speed bar beside the laptop. The laptop's own panels
+// (control bar, status panel, Views panel, speed bar, help card) are not drawn, so the screen
+// shows exactly what the headset would; the keys still work.
 // The drawn laptop sits where a seated person's keyboard would be; the position set with J in the
 // headset is kept for the headset and not changed here.
 //

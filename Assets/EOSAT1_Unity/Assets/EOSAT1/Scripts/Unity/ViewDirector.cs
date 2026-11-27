@@ -710,6 +710,7 @@ namespace Eosat1
         void OnGUI()
         {
             if (!ready) return;   // on the laptop's screen with or without a headset in use
+            if (VrPreview.Active) return;   // headset preview (F9 / `): only what the headset shows, like in VR
             if (Event.current.type != EventType.Repaint) return;
             GUI.depth = 50;   // behind the status panel and the key list
             HudStyle.Ensure();

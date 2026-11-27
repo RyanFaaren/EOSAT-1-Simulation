@@ -179,6 +179,7 @@ namespace Eosat1
 
         void OnGUI()
         {
+            if (VrPreview.Active) return;   // headset preview (F9 / `): only what the headset shows, like in VR
             // drawn on the computer's screen even while the headset is in use (it never shows in the headset)
             if (app == null) return;
             if (Event.current.type != EventType.Repaint) return;

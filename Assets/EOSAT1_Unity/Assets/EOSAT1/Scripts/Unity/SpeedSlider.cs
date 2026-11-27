@@ -149,6 +149,7 @@ namespace Eosat1
         void OnGUI()
         {
             if (app == null) return;
+            if (VrPreview.Active) return;   // headset preview (F9 / `): only what the headset shows, like in VR
             if (white == null)
             {
                 white = new Texture2D(1, 1, TextureFormat.RGBA32, false);
