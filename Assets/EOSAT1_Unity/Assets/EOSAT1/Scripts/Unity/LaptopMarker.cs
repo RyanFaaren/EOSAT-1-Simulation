@@ -23,7 +23,8 @@
 // it, and the status panel standing beside it on the left, like a second monitor.
 //
 // What you see: the outline of the laptop (deck, touchpad, screen) and its keyboard drawn flat on
-// the deck, every key labelled, the keys the simulation uses lit up in cyan. It hangs on the
+// the deck, every key labelled, the keys the simulation uses lit up in cyan. Any key you press
+// glows white on the drawing while you hold it, so you can tell where your fingers are. It hangs on the
 // headset's tracking space (the room), not on the virtual world, so it stays on the real laptop
 // however you fly, turn or jump between viewpoints. Remembered between runs (menu room and
 // simulation alike). If you recentre the headset (hold the Meta button), press J again.
@@ -105,6 +106,14 @@ namespace Eosat1
         readonly List<Vector2> testTargets = new List<Vector2>();   // where each target key is (x along the rows, z away)
         readonly List<Vector2> testErrors = new List<Vector2>();    // pressed key minus target key, metres
         readonly Dictionary<string, Renderer> keyQuads = new Dictionary<string, Renderer>();
+        // pressed keys glow on the drawing: which drawn key each real key is, its own colour, and until when it glows
+        readonly List<KeyValuePair<KeyCap, Renderer>> quadsInOrder = new List<KeyValuePair<KeyCap, Renderer>>();
+        readonly List<KeyValuePair<KeyCode, Renderer>> pressTargets = new List<KeyValuePair<KeyCode, Renderer>>();
+        readonly Dictionary<Renderer, Material> restMaterial = new Dictionary<Renderer, Material>();
+        readonly Dictionary<Renderer, float> glowUntil = new Dictionary<Renderer, float>();
+        readonly List<Renderer> glowDone = new List<Renderer>();
+        Material pressMat;
+        const float GlowAfterRelease = 0.12f;   // seconds a key keeps glowing after you let go
         Material flashMat;
         TextMesh testText;
         Renderer flashing;
@@ -300,11 +309,76 @@ namespace Eosat1
             }
         }
 
+        // ------------------------------------------------------------------ pressed keys glow
+        /// <summary>Which drawn key each real key lights: the main keys by label, and the two-of-a-kind ones by side.</summary>
+        void BuildPressTargets()
+        {
+            pressTargets.Clear();
+            foreach (KeyValuePair<KeyCode, string> k in Recognised)
+            {
+                Renderer r;
+                if (keyQuads.TryGetValue(k.Value, out r) && r != null) pressTargets.Add(new KeyValuePair<KeyCode, Renderer>(k.Key, r));
+            }
+            AddNth(KeyCode.LeftShift, "Shift", 0, false);
+            AddNth(KeyCode.RightShift, "Shift", 1, false);
+            AddNth(KeyCode.LeftControl, "Ctrl", 0, false);
+            AddNth(KeyCode.RightControl, "Ctrl", 1, false);
+            AddNth(KeyCode.KeypadPlus, "+", 0, true);
+            AddNth(KeyCode.KeypadMinus, "\u2212", 0, true);
+        }
+
+        void AddNth(KeyCode code, string label, int nth, bool pad)
+        {
+            int seen = 0;
+            foreach (KeyValuePair<KeyCap, Renderer> q in quadsInOrder)
+            {
+                if (q.Key.Label != label || q.Key.Pad != pad) continue;
+                if (seen++ == nth)
+                {
+                    pressTargets.Add(new KeyValuePair<KeyCode, Renderer>(code, q.Value));
+                    return;
+                }
+            }
+        }
+
+        /// <summary>Held keys glow white on the drawing (and a moment after you let go).</summary>
+        void GlowPressedKeys()
+        {
+            if (pressMat == null) return;
+            float now = Time.unscaledTime;
+            foreach (KeyValuePair<KeyCode, Renderer> t in pressTargets)
+            {
+                if (!InputShim.Held(t.Key)) continue;
+                glowUntil[t.Value] = now + GlowAfterRelease;
+                if (t.Value.sharedMaterial != pressMat) t.Value.sharedMaterial = pressMat;
+            }
+            glowDone.Clear();
+            foreach (KeyValuePair<Renderer, float> g in glowUntil)
+                if (now >= g.Value) glowDone.Add(g.Key);
+            foreach (Renderer r in glowDone)
+            {
+                glowUntil.Remove(r);
+                Material rest;
+                if (r != null && restMaterial.TryGetValue(r, out rest)) r.sharedMaterial = rest;
+            }
+        }
+
+        void ClearGlow()
+        {
+            foreach (KeyValuePair<Renderer, float> g in glowUntil)
+            {
+                Material rest;
+                if (g.Key != null && restMaterial.TryGetValue(g.Key, out rest)) g.Key.sharedMaterial = rest;
+            }
+            glowUntil.Clear();
+        }
+
         // ------------------------------------------------------------------ the keyboard test
         void StartTest()
         {
             if (marker == null) Build();
             if (marker == null) return;
+            ClearGlow();
             testing = true;
             testIndex = 0;
             testTargets.Clear();
@@ -526,6 +600,8 @@ namespace Eosat1
             if (marker.gameObject.activeSelf != show) marker.gameObject.SetActive(show);
             if (!show) return;
             if (marker.parent != Room) marker.SetParent(Room, false);
+            if (testing) ClearGlow();
+            else GlowPressedKeys();
             marker.localPosition = posePosition;
             marker.localRotation = Quaternion.Euler(0f, poseYaw, 0f);
             // a slow, gentle pulse on the outline so it reads as a guide, not part of the space scene
@@ -661,6 +737,10 @@ namespace Eosat1
             kb.SetParent(marker, false);
             foreach (KeyCap k in Layout()) Key(kb, f, k);
 
+            pressMat = new Material(sh) { name = "EOSAT1 Laptop Key (pressed)" };
+            SetColor(pressMat, new Color(0.85f, 1f, 1f, 1f));
+            BuildPressTargets();
+
             flashMat = new Material(sh) { name = "EOSAT1 Laptop Key (test)" };
             SetColor(flashMat, new Color(1f, 0.72f, 0.2f, 1f));
             var tt = new GameObject("Keyboard Test Text");
@@ -717,6 +797,8 @@ namespace Eosat1
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             r.receiveShadows = false;
             if (!k.Pad && !keyQuads.ContainsKey(k.Label)) keyQuads[k.Label] = r;
+            quadsInOrder.Add(new KeyValuePair<KeyCap, Renderer>(k, r));
+            restMaterial[r] = r.sharedMaterial;
 
             var g = new GameObject("Label");
             g.transform.SetParent(parent, false);
@@ -771,6 +853,7 @@ namespace Eosat1
             if (mat != null) Destroy(mat);
             if (keyMats != null) foreach (Material m in keyMats) if (m != null) Destroy(m);
             if (flashMat != null) Destroy(flashMat);
+            if (pressMat != null) Destroy(pressMat);
         }
     }
 }
